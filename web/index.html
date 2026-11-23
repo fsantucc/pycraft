@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PyCraft — apprendre Python en construisant un monde</title>
+<link rel="stylesheet" href="/css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%235b8c32'/><rect y='10' width='16' height='6' fill='%238a5a2b'/></svg>">
+</head>
+<body>
+<header id="topbar">
+  <div class="brand"><span class="brand-block"></span>PyCraft</div>
+  <div id="where" class="where"></div>
+  <div class="xp">
+    <span id="player-level" class="badge">Niv. 1</span>
+    <div class="xp-bar"><div id="xp-fill"></div></div>
+    <span id="xp-text">0 XP</span>
+  </div>
+  <div id="rewards" class="rewards" title="Récompenses"></div>
+  <nav>
+    <button id="btn-map" class="mc-btn">Carte du monde</button>
+    <button id="btn-progress" class="mc-btn">Progression</button>
+  </nav>
+</header>
+
+<main id="layout">
+  <!-- ======================= LEFT : editor ======================= -->
+  <section id="left" class="panel">
+    <div class="panel-head">
+      <div id="editor-label" class="label">Éditeur</div>
+      <div class="tools">
+        <button id="btn-quality" class="tiny" title="Revue de style intégrée + flake8 / mypy s'ils sont installés">Analyse qualité</button>
+        <button id="btn-reset-code" class="tiny" title="Revenir au code de départ">Réinitialiser</button>
+      </div>
+    </div>
+    <div id="file-tabs" class="file-tabs"></div>
+    <div id="editor-wrap">
+      <div id="editor"></div>
+      <div id="editor-veil" class="veil hidden">
+        <p>Observe d'abord le monde.</p>
+        <p class="muted">Le code sera révélé à l'étape « Démonstration ».</p>
+      </div>
+    </div>
+    <div class="run-row">
+      <button id="btn-run" class="mc-btn primary" title="Ctrl+Entrée">▶ Exécuter</button>
+      <button id="btn-check" class="mc-btn gold hidden">✔ Vérifier la mission</button>
+      <span id="save-state" class="muted small"></span>
+    </div>
+    <div id="console" class="console">
+      <div class="console-head">Console <span id="console-step" class="muted small"></span></div>
+      <pre id="console-out"></pre>
+      <div id="console-extra"></div>
+    </div>
+  </section>
+
+  <!-- ======================= CENTER : world ======================= -->
+  <section id="center" class="panel">
+    <div id="world-wrap">
+      <canvas id="world"></canvas>
+      <div id="world-hud">
+        <div id="zone-legend">
+          <span class="lg lg-blue">Zone de création : les classes (plans)</span>
+          <span class="lg lg-green">Le monde : les objets</span>
+          <span class="lg lg-sign">Place : les variables</span>
+        </div>
+        <div class="cam">
+          <button id="cam-rot" class="tiny" title="Pivoter la vue">⟳</button>
+          <button id="cam-in" class="tiny">＋</button>
+          <button id="cam-out" class="tiny">－</button>
+          <button id="cam-home" class="tiny" title="Recentrer">⌂</button>
+        </div>
+      </div>
+      <div id="tooltip" class="tooltip hidden"></div>
+      <div id="world-banner" class="world-banner hidden"></div>
+    </div>
+    <div id="timeline">
+      <button id="tl-start" class="tiny" title="Début">⏮</button>
+      <button id="tl-back" class="tiny" title="Pas précédent (Maj+F10)">◀</button>
+      <button id="tl-play" class="tiny wide" title="Lecture / pause (Espace dans le monde)">▶ Lecture</button>
+      <button id="tl-step" class="tiny" title="Pas suivant (F10)">▶|</button>
+      <button id="tl-end" class="tiny" title="Fin">⏭</button>
+      <input id="tl-range" type="range" min="0" max="0" value="0">
+      <span id="tl-info" class="small"></span>
+      <label class="small speed">Vitesse <input id="tl-speed" type="range" min="1" max="10" value="5"></label>
+    </div>
+    <div id="event-log" class="event-log"></div>
+  </section>
+
+  <!-- ======================= RIGHT : lesson / inspector ======================= -->
+  <section id="right" class="panel">
+    <div class="tabs">
+      <button data-tab="lesson" class="tab active">Leçon</button>
+      <button data-tab="inspector" class="tab">Inspecteur</button>
+      <button data-tab="diagram" class="tab">Diagramme</button>
+    </div>
+    <div id="tab-lesson" class="tab-body active"></div>
+    <div id="tab-inspector" class="tab-body"></div>
+    <div id="tab-diagram" class="tab-body">
+      <div class="diagram-tools">
+        <label class="small"><input id="dg-objects" type="checkbox" checked> Afficher les objets</label>
+        <span class="muted small">Clique sur une classe ou un objet pour le retrouver dans le monde.</span>
+      </div>
+      <div id="diagram"></div>
+    </div>
+  </section>
+</main>
+
+<div id="overlay" class="overlay hidden">
+  <div class="overlay-box">
+    <button id="overlay-close" class="tiny close">✕</button>
+    <div id="overlay-body"></div>
+  </div>
+</div>
+<div id="toasts"></div>
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>
