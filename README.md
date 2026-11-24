@@ -128,6 +128,15 @@ synthétisé par le navigateur, aucun fichier audio :
 
 **Visite guidée** : proposée au premier lancement, rejouable avec le bouton **?**.
 
+**Aperçu (premier lancement)** : une bande-annonce rapide (~25 s) qui montre les maps,
+leurs personnages et leurs créatures, quelques attaques et quelques réalisations, sans
+rien dévoiler de l'histoire ni des exercices. Elle ne peut pas être passée. Le bouton 🎬
+la rejoue (et là, on peut la quitter).
+
+**Cinématique d'histoire** : la première fois qu'on ouvre un niveau, les personnages
+racontent l'histoire ; tant qu'ils n'ont pas fini, « Comprendre → » et les autres étapes
+restent verrouillés. Les boutons ×1 / ×2 / ×4 accélèrent la cinématique, sans la passer.
+
 **Scènes d'histoire** : chaque niveau (les 43) a sa scène dans le coin droit de la carte,
 avec les personnages et le décor de l'histoire (le villageois et sa maison à éclairer, le
 garde du pont, la mineuse et sa tour, le gardien du portail…). À l'ouverture du niveau,
@@ -164,7 +173,7 @@ pycraft/
 │   └── curriculum/             régions, niveaux, missions, quiz (données)
 ├── web/                        interface (HTML/CSS/JS sans dépendance)
 │   └── js/  main · editor · world · models · scene · fx · trace · inspector
-│            diagram · lesson · tour · sound · util
+│            diagram · lesson · tour · trailer · sound · util
 ├── tests/                      pytest (+ solutions de référence : SPOILERS)
 │   ├── test_frontend.py        JS : syntaxe, imports, ids, tests unitaires,
 │   │                           test dans un vrai navigateur (si Chrome présent)

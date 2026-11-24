@@ -5,6 +5,7 @@ import { Inspector } from "./inspector.js";
 import { LessonPanel, STEPS } from "./lesson.js";
 import { sound } from "./sound.js";
 import { Tour } from "./tour.js";
+import { Trailer } from "./trailer.js";
 import { TraceModel, describe } from "./trace.js";
 import { api, el, esc, md, pushToast, showValue, toast } from "./util.js";
 import { World } from "./world.js";
@@ -55,6 +56,7 @@ class App {
       onHover: (target, e) => this.hover(target, e),
     });
     this.inspector = new Inspector($("tab-inspector"), { onSelect: (t) => this.select(t) });
+    this.world.onCinematic = (info) => this.lesson.onCinematic(info);
     this.lesson = new LessonPanel($("tab-lesson"), this);
     this.bindUi();
   }
@@ -80,9 +82,33 @@ class App {
       ? remembered : firstOpen;
     await this.openLevel(target);
     this.startTracking();
+    // The very first time: the trailer of the whole game (it cannot be
+    // skipped, only played faster), then the level starts for real.
+    let seen = true;
+    try {
+      seen = localStorage.getItem("pycraft.trailerSeen") === "1";
+    } catch {
+      seen = true;
+    }
+    if (!seen) {
+      await this.playTrailer(true);
+    }
     if (!localStorage.getItem("pycraft.welcomed")) {
       localStorage.setItem("pycraft.welcomed", "1");
       this.showWelcome();
+    }
+  }
+
+  async playTrailer(first = false) {
+    if (this.trailerPlaying) return;
+    this.trailerPlaying = true;
+    $("overlay").classList.add("hidden");
+    try {
+      this.trailer = new Trailer(this);
+      await this.trailer.play({ first });
+    } finally {
+      this.trailerPlaying = false;
+      await this.openLevel(this.level.id);
     }
   }
 
@@ -279,6 +305,7 @@ class App {
     $("btn-run").addEventListener("click", () => this.runCurrent());
     $("btn-sound").addEventListener("click", (e) => { e.stopPropagation(); this.toggleSoundPanel(); });
     $("btn-tour").addEventListener("click", () => this.startTour());
+    $("btn-trailer").addEventListener("click", () => this.playTrailer(false));
     this.updateMuteButton();
     window.addEventListener("pycraft:achievements", (e) => this.onAchievements(e.detail));
     $("btn-check").addEventListener("click", () => this.checkMission());
@@ -311,6 +338,11 @@ class App {
       this.renderSide();
     }));
     window.addEventListener("keydown", (e) => {
+      if (document.body.classList.contains("trailer-on")) {
+        // During the trailer the keyboard does nothing (no skipping).
+        if (["Escape", " ", "F5", "F10", "Enter"].includes(e.key)) e.preventDefault();
+        return;
+      }
       if (e.key === "Escape" && !$("overlay").classList.contains("hidden") && !document.querySelector(".tour")) {
         e.preventDefault();
         $("overlay").classList.add("hidden");
@@ -350,7 +382,7 @@ class App {
     this.world.hideBoss();
     // The characters and scenery of the story, and the story told by them.
     this.world.setStage(this.level.scene, !!this.progress.levels[levelId].mission_passed);
-    this.world.playIntro();
+    this.introPlayedFor = null;
     this.lesson.reset();
     $("where").textContent = `${this.region.name} — ${this.level.number} ${this.level.title}`;
     const saved = await api(`/api/code?level=${levelId}`);
@@ -383,6 +415,10 @@ class App {
   }
 
   async goStep(step) {
+    if (step !== "story" && this.world.cine && this.world.cine.blocking) {
+      toast("Écoute d'abord l'histoire jusqu'au bout. Tu peux l'accélérer avec ⏩.", "");
+      return;
+    }
     this.step = step;
     const missionSide = ["mission", "quiz", "mastery"].includes(step);
     this.setMode(missionSide ? "mission" : "demo");
@@ -402,16 +438,26 @@ class App {
     }
     this.lesson.render();
     document.querySelector('.tab[data-tab="lesson"]').click();
-    clearTimeout(this.demoTimer);
     if (step === "story") {
-      // First the characters tell the story, then the demonstration plays.
-      const wait = Math.max(0, this.world.focusUntil - performance.now() - 1200);
+      // First the characters tell the story (a cinematic), then the
+      // demonstration plays. The first time, the cinematic cannot be skipped:
+      // it can only be played faster.
       const levelId = this.level.id;
-      if (wait > 0) {
+      if (this.introPlayedFor !== levelId) {
+        this.introPlayedFor = levelId;
+        const st = this.progress.levels[levelId] || {};
+        const firstTime = !(st.steps_seen || []).includes("explain") && !["completed", "mastered"].includes(st.status);
         this.clearRun();
-        this.demoTimer = setTimeout(() => {
-          if (this.step === "story" && this.level.id === levelId) this.runDemo(true);
-        }, wait);
+        const playing = this.world.playIntro({
+          blocking: firstTime,
+          onEnd: () => {
+            if (this.step === "story" && this.level.id === levelId) {
+              this.lesson.render();
+              this.runDemo(true);
+            }
+          },
+        });
+        if (!playing) this.runDemo(true);
       } else {
         this.runDemo(true);
       }
@@ -726,7 +772,7 @@ class App {
   select(target) {
     if (target && target.kind === "npc") {
       // Clicking a character of the story: he tells his story again.
-      this.world.playIntro();
+      if (!this.world.cine) this.world.playIntro();
       return;
     }
     this.selected = target;

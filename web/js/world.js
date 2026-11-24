@@ -102,6 +102,10 @@ export class World {
     this.stage = null;
     this.introTimers = [];
     this.focusUntil = 0;
+    this.trailerActive = false;
+    this.mobs = [];
+    this.cine = null;
+    this.onCinematic = null;
     this.nextAmbient = 0;
     this.labelRects = [];
     this.clouds = Array.from({ length: 7 }, (_, i) => ({
@@ -174,12 +178,20 @@ export class World {
     // While the characters tell the story, the camera comes close to them.
     if (this.stage && performance.now() < this.focusUntil) {
       for (const item of [...this.stage.npcs, ...this.stage.props]) add(item.x - 0.5, item.y - 0.5, item.x + (item.w || 1) + 0.5, item.y + (item.d || 1) + 0.5, 3.2);
+      if (this.boss) add(...SD(13, 10.5), ...SD(16, 13), 4.6);
+      for (const m of this.mobs) add(m.x - 0.5, m.y - 0.5, m.x + 1.5 * m.scale, m.y + 1.5 * m.scale, 2.4 * m.scale);
       const us = pts.map((p) => p[0]);
       const vs = pts.map((p) => p[1]);
       const du = Math.max(...us) - Math.min(...us);
       const dv = Math.max(...vs) - Math.min(...vs);
-      const k = Math.max(0.8, Math.min(2.2, Math.min(this.width / (du + 120), this.height / (dv + 160))));
-      return { k, u: (Math.max(...us) + Math.min(...us)) / 2, v: (Math.max(...vs) + Math.min(...vs)) / 2 - 30 };
+      const cap = this.trailerActive ? 3.0 : 2.2;
+      const [padU, padV] = this.trailerActive ? [40, 70] : [120, 160];
+      const k = Math.max(0.8, Math.min(cap, Math.min(this.width / (du + padU), this.height / (dv + padV))));
+      const u = (Math.max(...us) + Math.min(...us)) / 2;
+      const v = (Math.max(...vs) + Math.min(...vs)) / 2 - 30;
+      // In the trailer, the scene sits to the right and above the captions.
+      if (this.trailerActive) return { k, u: u - (this.width * 0.12) / k, v: v + (this.height * 0.08) / k };
+      return { k, u, v };
     }
     for (const bp of this.blueprints.values()) add(bp.x, bp.y, bp.x + 2, bp.y + 2, 2);
     for (const e of this.entities.values()) add(e.tx - 0.5, e.ty - 0.5, e.tx + 1.5, e.ty + 1.5, 2.6);
@@ -491,8 +503,7 @@ export class World {
   // scene = { npcs: [{id, name, skin, at, pose}], props: [{type, at, label,
   // n, color}], intro: [[id, text]], answers, argv_by, success, fail }
   setStage(scene, done = false) {
-    this.introTimers.forEach(clearTimeout);
-    this.introTimers = [];
+    this.stopIntro();
     this.effects = this.effects.filter((f) => !(f.kind === "bubble" && String(f.owner).startsWith("npc:")));
     if (!scene || !scene.npcs || !scene.npcs.length) {
       this.stage = null;
@@ -532,36 +543,116 @@ export class World {
     n.poseUntil = performance.now() + ms;
   }
 
-  npcSay(id, text, { dur = 0, delay = 0, answer = false } = {}) {
+  npcSay(id, text, { dur = 0, delay = 0, answer = false, speed = 1 } = {}) {
     const n = this.stageNpc(id);
     if (!n) return;
     const go = () => {
       const life = dur || Math.min(9000, 2400 + String(text).length * 45);
       this.npcPose(n.id, "talk", Math.min(life, 2200));
-      sound.voice(String(text), voiceOf(n), { pan: this.panAt(this.npcTop(n.id)) });
-      this.addEffect({ kind: "bubble", at: this.npcTop(n.id), text: answer ? `🗣 ${text}` : String(text), dur: life, owner: `npc:${n.id}`, npc: true });
+      const voice = voiceOf(n);
+      sound.voice(String(text), { ...voice, speed: voice.speed / speed }, { pan: this.panAt(this.npcTop(n.id)) });
+      this.addEffect({ kind: "bubble", at: this.npcTop(n.id), text: answer ? `🗣 ${text}` : String(text), dur: life, owner: `npc:${n.id}`, npc: true, speed });
     };
     if (delay) this.introTimers.push(setTimeout(go, delay)); else go();
   }
 
-  // The characters tell the story, one line after the other.
-  playIntro() {
-    if (!this.stage || !this.stage.intro) return 0;
-    this.introTimers.forEach(clearTimeout);
-    this.introTimers = [];
-    let at = 600;
-    for (const [id, text] of this.stage.intro) {
-      const life = Math.min(8000, 2600 + text.length * 50);
-      this.introTimers.push(setTimeout(() => this.npcSay(id, text, { dur: life }), at));
-      at += life * 0.8;
+  // The characters tell the story, one line after the other: a little
+  // cinematic. Its clock can run faster (speed ×2, ×4) but, when it is
+  // "blocking", it cannot be skipped. onEnd is called when it is over.
+  playIntro({ blocking = false, onEnd = null } = {}) {
+    this.stopIntro();
+    if (!this.stage || !this.stage.intro || !this.stage.intro.length) {
+      if (onEnd) onEnd();
+      return false;
     }
-    this.focusUntil = performance.now() + at + 1500;
-    return at;
+    let at = 600;
+    const lines = this.stage.intro.map(([id, text]) => {
+      const life = Math.min(8000, 2600 + text.length * 50);
+      const line = { id, text, at, life };
+      at += life * 0.8;
+      return line;
+    });
+    this.cine = { lines, t: 0, next: 0, total: at + 700, speed: 1, blocking, onEnd, last: performance.now() };
+    this.focusUntil = Infinity;
+    this.emitCine();
+    return true;
   }
 
-  // Back to the whole world (a program is running).
+  stopIntro() {
+    this.introTimers.forEach(clearTimeout);
+    this.introTimers = [];
+    if (this.cine) {
+      this.cine = null;
+      this.focusUntil = 0;
+      this.emitCine();
+    }
+  }
+
+  setCineSpeed(speed) {
+    const c = this.cine;
+    if (!c) return;
+    this.rescaleBubbles(c.speed, speed);
+    c.speed = speed;
+    this.emitCine();
+  }
+
+  // The bubbles already on screen follow a new pace (cinematic / trailer).
+  rescaleBubbles(oldSpeed, speed) {
+    const ratio = speed / oldSpeed;
+    const now = performance.now();
+    for (const f of this.effects) {
+      if (f.kind !== "bubble") continue;
+      const elapsed = now - f.t0;
+      const left = Math.max(0, f.dur - elapsed) / ratio;
+      f.dur = elapsed + left;
+      // The text already written stays; the rest is written at the new pace.
+      f.revealFrom = (f.revealFrom || 0) + ((now - (f.clock0 || f.t0)) / 22) * (f.speed || 1);
+      f.clock0 = now;
+      f.speed = speed;
+    }
+  }
+
+  cineInfo() {
+    const c = this.cine;
+    if (!c) return null;
+    return { blocking: c.blocking, speed: c.speed, line: Math.min(c.next, c.lines.length), lines: c.lines.length,
+      progress: Math.min(1, c.t / c.total) };
+  }
+
+  emitCine() {
+    if (this.onCinematic) this.onCinematic(this.cineInfo());
+  }
+
+  updateCinematic(now) {
+    const c = this.cine;
+    if (!c) return;
+    c.t += (now - c.last) * c.speed;
+    c.last = now;
+    let changed = false;
+    while (c.next < c.lines.length && c.lines[c.next].at <= c.t) {
+      const line = c.lines[c.next];
+      this.npcSay(line.id, line.text, { dur: line.life / c.speed, speed: c.speed });
+      c.next += 1;
+      changed = true;
+    }
+    if (c.t >= c.total) {
+      const { onEnd } = c;
+      this.cine = null;
+      this.focusUntil = now + 600;
+      this.emitCine();
+      if (onEnd) onEnd();
+      return;
+    }
+    if (changed || now - (c.lastEmit || 0) > 200) {
+      c.lastEmit = now;
+      this.emitCine();
+    }
+  }
+
+  // Back to the whole world (a program is running) — except during the
+  // story cinematic, which keeps the camera on the characters.
   unfocus() {
-    this.focusUntil = 0;
+    if (!this.cine) this.focusUntil = 0;
   }
 
   npcArgv(argv) {
@@ -667,6 +758,68 @@ export class World {
       if (!p.label) continue;
       const [x, y] = this.project(p.x + (p.cx || 0.5), p.y + (p.cy || 0.5), (p.top || 1) + 0.25);
       this.tag(x, y, p.label, "#f5ecd7", 9, "rgba(40,30,20,0.75)", {});
+    }
+  }
+
+  // ------------------------------------------------- decorative creatures
+  // Mobs shown in the trailer (no program behind them): they idle, get hit,
+  // and vanish in a puff of smoke.
+  setMobs(list) {
+    this.mobs = (list || []).map((m, i) => {
+      const [x, y] = SD(m.s, m.d);
+      return { ...m, x, y, scale: m.scale || 1, born: performance.now() + i * 120, hurt: 0, dying: 0 };
+    });
+    for (const m of this.mobs) this.addEffect({ kind: "pillar", at: () => this.project(m.x + 0.5 * m.scale, m.y + 0.5 * m.scale, 0), color: "#b8f36b", dur: 900 });
+  }
+
+  mobTop(id) {
+    return () => {
+      const m = this.mobs.find((x) => x.id === id);
+      return m ? this.project(m.x + 0.5 * m.scale, m.y + 0.5 * m.scale, 1.6 * m.scale) : [0, 0];
+    };
+  }
+
+  // A character of the scene (or the sky) strikes a mob.
+  hitMob(id, from = null, color = "#ffd84a", big = false) {
+    const m = this.mobs.find((x) => x.id === id);
+    if (!m) return;
+    const at = this.mobTop(id);
+    if (from) this.addEffect({ kind: "beam", from, to: at, color, label: "", dur: 600 });
+    else this.addEffect({ kind: "bolt", at, dur: 700 });
+    m.hurt = performance.now();
+    this.particles.burst(at, { count: big ? 40 : 18, colors: [color, "#ffffff", "#ff6b61"], speed: big ? 140 : 80, up: 90, gravity: 220, size: 4, glow: true });
+    if (big) this.shakeCamera(8, 400);
+  }
+
+  killMob(id) {
+    const m = this.mobs.find((x) => x.id === id);
+    if (!m) return;
+    m.dying = performance.now();
+    const at = () => this.project(m.x + 0.5 * m.scale, m.y + 0.5 * m.scale, 0.8 * m.scale);
+    this.particles.burst(at, { count: 36, colors: ["#dddddd", "#aaaaaa", "#ffffff"], speed: 90, up: 60, gravity: -20, size: 6, life: 900 });
+    setTimeout(() => { this.mobs = this.mobs.filter((x) => x !== m); }, 450);
+  }
+
+  collectMobs(list, now) {
+    for (const m of this.mobs) {
+      if (now < m.born) continue;
+      const { parts } = buildParts(m.model, {}, {});
+      const grow = Math.min(1, (now - m.born) / 300);
+      const dying = m.dying ? Math.max(0, 1 - (now - m.dying) / 450) : 1;
+      const k = m.scale * grow * dying;
+      if (k <= 0.01) continue;
+      const hurt = now - m.hurt < 260;
+      const bob = Math.abs(Math.sin(now / 260 + m.x)) * 0.06;
+      const shake = hurt ? Math.sin(now / 25) * 0.08 : 0;
+      list.push({ d: this.depthOf(m.x + 0.5, m.y + 0.5, 0), fn: () => {
+        const key = (p) => this.depthOf(p.x + p.w / 2, p.y + p.d / 2, p.z);
+        const leg = (p) => (String(p.role || "").startsWith("leg") ? 0 : 1);
+        const sorted = parts.map((p, pi) => ({ ...p, pi })).sort((a, b) => leg(a) - leg(b) || key(a) - key(b) || a.pi - b.pi);
+        for (const p of sorted) {
+          this.box(m.x + shake + p.x * k, m.y + p.y * k, p.z * k + bob, p.w * k, p.d * k, p.h * k, hurt ? "#ff5040" : p.c, 1,
+            "rgba(0,0,0,0.28)", p.w * p.h > 0.12 ? 2 : 0, p.pi * 4.1 + m.x);
+        }
+      } });
     }
   }
 
@@ -1002,6 +1155,7 @@ export class World {
       this.cam.v += (target.v - this.cam.v) * a;
     }
     this.spawnAmbient(now);
+    this.updateCinematic(now);
     this.draw(now);
     requestAnimationFrame((t) => this.loop(t));
   }
@@ -1096,6 +1250,7 @@ export class World {
     this.hitboxes = [];
     this.collectProps(drawables, now);
     this.collectStage(drawables, now);
+    this.collectMobs(drawables, now);
 
     // Blueprint pedestals and holograms (with a scan line while building).
     for (const bp of this.blueprints.values()) {
@@ -1351,6 +1506,12 @@ export class World {
     c.beginPath();
     c.ellipse(sx, sy, 26 * k, 13 * k, 0, 0, Math.PI * 2);
     c.fill();
+    for (const m of this.mobs) {
+      const [mx, my] = this.project(m.x + 0.5 * m.scale, m.y + 0.5 * m.scale, 0);
+      c.beginPath();
+      c.ellipse(mx, my, 20 * k * m.scale, 10 * k * m.scale, 0, 0, Math.PI * 2);
+      c.fill();
+    }
     for (const n of this.stage ? this.stage.npcs : []) {
       const [nx, ny] = this.project(n.x + 0.5, n.y + 0.5, 0);
       c.beginPath();
@@ -1459,6 +1620,23 @@ export class World {
 
   drawOverlay(now) {
     const c = this.ctx;
+    // Cinema bars while the characters tell the story.
+    const target = this.cine || this.trailerActive ? 1 : 0;
+    this.bars = (this.bars || 0) + (target - (this.bars || 0)) * 0.12;
+    if (this.bars > 0.01) {
+      const h = Math.round(this.height * 0.075 * this.bars);
+      c.fillStyle = "#000";
+      c.fillRect(0, 0, this.width, h);
+      c.fillRect(0, this.height - h, this.width, h);
+      if (this.cine && this.cine.speed > 1) {
+        c.font = "700 13px ui-monospace, monospace";
+        c.fillStyle = "#f2c14e";
+        c.textAlign = "right";
+        c.textBaseline = "middle";
+        c.fillText(`⏩ ×${this.cine.speed}`, this.width - 12, this.height - h / 2);
+        c.textAlign = "left";
+      }
+    }
     if (now < this.flash.until) {
       const t = (now - this.flash.t0) / (this.flash.until - this.flash.t0);
       c.globalAlpha = 1 - t;
@@ -1975,7 +2153,7 @@ export class World {
         const pop = t < 0.04 ? 0.7 + 7.5 * t : 1;
         const fade = t > 0.88 ? (1 - t) / 0.12 : 1;
         c.globalAlpha = Math.min(fade, pop) * (i === 0 ? 1 : Math.max(0.55, 0.9 - i * 0.12));
-        const shown = (f.revealFrom || 0) + (now - f.t0) / 22;
+        const shown = (f.revealFrom || 0) + ((now - (f.clock0 || f.t0)) / 22) * (f.speed || 1);
         const reveal = shown / Math.max(1, f.text.length) / 2.2;
         const style = f.question ? { bg: "#fff4cc", border: "#8a5a10" } : f.npc ? { bg: "#eef9e4", border: "#2c5a1f", color: "#14240c" } : {};
         if (i > 0) style.tail = false;

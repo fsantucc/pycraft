@@ -183,12 +183,19 @@ def test_browser_smoke(server_url: str) -> None:
         browser = p.chromium.launch(executable_path=chrome,
                                     args=["--no-sandbox"])
         page = browser.new_page(viewport={"width": 1500, "height": 880})
+        # The trailer of the first launch is tested on its own below.
+        page.add_init_script(
+            "localStorage.setItem('pycraft.trailerSeen', '1')")
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(server_url)
         page.wait_for_timeout(1500)
         assert page.locator("#overlay").is_visible()  # welcome screen
         page.evaluate("document.getElementById('overlay')"
                       ".classList.add('hidden')")
+        # The story of the first level is told first (it can only be
+        # played faster), then the other steps open.
+        page.evaluate("window.pycraft.world.setCineSpeed(4)")
+        page.wait_for_function("!window.pycraft.world.cine", timeout=30000)
         page.evaluate("window.pycraft.goStep('experiment')")
         page.wait_for_timeout(400)
         page.fill("#editor textarea", PROGRAM)
@@ -301,3 +308,39 @@ def test_every_sound_renders_cleanly(server_url: str) -> None:
     for name, level in levels.items():
         assert level["bad"] == 0, name
         assert 0.01 < level["peak"] < 0.98, (name, level["peak"])
+
+
+def test_first_launch_trailer_cannot_be_skipped(server_url: str) -> None:
+    playwright = pytest.importorskip("playwright.sync_api")
+    chrome = _browser()
+    if chrome is None:
+        pytest.skip("aucun navigateur Chrome/Chromium")
+    errors: list[str] = []
+    with playwright.sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=chrome,
+                                    args=["--no-sandbox"])
+        page = browser.new_page(viewport={"width": 1300, "height": 800})
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(server_url)
+        page.wait_for_timeout(1500)
+        assert page.locator(".tr-start").is_visible()
+        assert page.locator(".trailer >> text=Quitter").count() == 0
+        page.click("text=Découvrir PyCraft")
+        page.wait_for_timeout(800)
+        page.keyboard.press("Escape")
+        assert page.locator(".trailer").count() == 1  # not skipped
+        page.wait_for_timeout(2500)
+        # The maps show their characters and creatures.
+        assert page.evaluate("window.pycraft.world.stage.npcs.length") > 0
+        page.evaluate("window.pycraft.trailer.rate = 8")
+        page.wait_for_selector(".trailer", state="detached", timeout=90000)
+        assert page.evaluate(
+            "localStorage.getItem('pycraft.trailerSeen')") == "1"
+        page.wait_for_timeout(800)
+        # Then the story of the first level: locked until it is told.
+        info: Any = page.evaluate("window.pycraft.world.cineInfo()")
+        assert info and info["blocking"]
+        page.evaluate("window.pycraft.goStep('explain')")
+        assert page.evaluate("window.pycraft.step") == "story"
+        browser.close()
+    assert not errors, errors
