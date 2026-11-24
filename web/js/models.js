@@ -64,19 +64,21 @@ export function crierParts(pose = "idle", t = 0) {
   const shake = pose === "alert" ? Math.sin(t / 30) * 0.03 : 0;
   const lookX = pose === "idle" ? Math.sin(t / 2300) * 0.025 : 0;
 
-  // Legs: white breeches and brown boots (one step forward when he hops).
+  // Two legs with a visible gap: cream breeches, white stockings and brown
+  // boots. They walk on the spot when he hops.
   const step = pose === "speak" || pose === "cheer" ? Math.sin(t / 110) * 0.05 : 0;
-  add(0.25, 0.37 + step, 0.28, 0.22, 0.26, L - 0.28, "#d8ccad", "legL");
-  add(0.53, 0.37 - step, 0.28, 0.22, 0.26, L - 0.28, "#d8ccad", "legR");
-  add(0.24, 0.36 + step, 0, 0.24, 0.3, 0.3, "#4a2c17", "legL");
-  add(0.52, 0.36 - step, 0, 0.24, 0.3, 0.3, "#4a2c17", "legR");
-  add(0.24, 0.6 + step, 0, 0.24, 0.08, 0.08, "#2e1a0c", "legL");
-  add(0.52, 0.6 - step, 0, 0.24, 0.08, 0.08, "#2e1a0c", "legR");
+  for (const [lx, role, dy] of [[0.23, "legL", step], [0.57, "legR", -step]]) {
+    add(lx, 0.38 + dy, 0.42, 0.2, 0.24, L - 0.42, "#d8ccad", role);
+    add(lx + 0.01, 0.39 + dy, 0.22, 0.18, 0.22, 0.2, "#f4f1ea", role);
+    add(lx - 0.01, 0.37 + dy, 0, 0.22, 0.28, 0.24, "#5a3519", role);
+    add(lx - 0.01, 0.65 + dy, 0, 0.22, 0.07, 0.1, "#3e2410", role);
+    add(lx + 0.06, 0.652 + dy, 0.12, 0.1, 0.005, 0.05, "#f2c14e", role);
+  }
 
   // Coat with tails, belt, buttons, white jabot and a red mantle.
   const bz = L + hop;
-  add(0.19 + shake, 0.3, bz - 0.36, 0.62, 0.4, 0.4, shadeColor(coat, 0.85));
-  add(0.189 + shake, 0.699, bz - 0.36, 0.622, 0.002, 0.05, gold);
+  add(0.18 + shake, 0.3, bz - 0.3, 0.64, 0.14, 0.34, shadeColor(coat, 0.85));
+
   add(0.2 + shake, 0.32, bz, 0.6, 0.36, 0.78, coat);
   add(0.199 + shake, 0.31, bz + 0.06, 0.602, 0.38, 0.08, "#3a2414");
   add(0.45 + shake, 0.692, bz + 0.05, 0.1, 0.01, 0.1, gold);

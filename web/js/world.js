@@ -755,7 +755,9 @@ export class World {
   }
 
   // Draw an axis-aligned box given in world coordinates.
-  box(x, y, z, w, d, h, color, alpha = 1, outline = "rgba(0,0,0,0.25)", tex = 0) {
+  // seed: fixes the pixel noise of a textured box. Moving things pass their
+  // own stable seed, otherwise the noise would change every frame (flicker).
+  box(x, y, z, w, d, h, color, alpha = 1, outline = "rgba(0,0,0,0.25)", tex = 0, seed = null) {
     const corners = [[x, y], [x + w, y], [x + w, y + d], [x, y + d]].map(([a, b]) => this.rotate(a, b));
     const xs = corners.map((c) => c[0]);
     const ys = corners.map((c) => c[1]);
@@ -771,7 +773,7 @@ export class World {
     const right = [P(rx + rw, ry, z + h), P(rx + rw, ry + rd, z + h), P(rx + rw, ry + rd, z), P(rx + rw, ry, z)];
     const top = [P(rx, ry, z + h), P(rx + rw, ry, z + h), P(rx + rw, ry + rd, z + h), P(rx, ry + rd, z + h)];
     if (tex) {
-      const seed = x * 13.1 + y * 7.7 + z * 3.3;
+      seed = seed ?? x * 13.1 + y * 7.7 + z * 3.3;
       this.texturedFace(left, shade(color, 0.66), tex, seed + 1);
       this.texturedFace(right, shade(color, 0.82), tex, seed + 2);
       this.texturedFace(top, color, tex, seed + 3);
@@ -866,19 +868,24 @@ export class World {
     for (const ent of this.entities.values()) {
       const parts = this.animatedParts(ent, now);
       const blink = (now + ent.oid.length * 731) % 3600 < 120;
-      for (const p of parts) {
-        if (p.role === "eye" && blink) continue;
-        const wx = ent.x + p.x * ent.scale;
-        const wy = ent.y + p.y * ent.scale;
-        const big = p.w * p.h > 0.12 && p.role !== "eye";
-        drawables.push({ d: this.depthOf(wx + p.w * ent.scale / 2, wy + p.d * ent.scale / 2, p.z), fn: () => {
-          const glitch = ent.anim && ent.anim.kind === "glitch" && now - ent.anim.t0 < 900;
-          const hurt = ent.anim && ent.anim.kind === "hurt" && now - ent.anim.t0 < 400;
+      // One drawable per object, parts ordered inside it (legs first), so
+      // the parts of one body never flicker in front of each other.
+      const glitch = ent.anim && ent.anim.kind === "glitch" && now - ent.anim.t0 < 900;
+      const hurt = ent.anim && ent.anim.kind === "hurt" && now - ent.anim.t0 < 400;
+      drawables.push({ d: this.depthOf(ent.x + 0.5 * ent.scale, ent.y + 0.5 * ent.scale, 0), fn: () => {
+        const leg = (p) => (String(p.role || "").startsWith("leg") ? 0 : 1);
+        const key = (p) => this.depthOf(p.x + p.w / 2, p.y + p.d / 2, p.z);
+        const list = parts.map((p, pi) => ({ ...p, pi }))
+          .sort((a, b) => leg(a) - leg(b) || key(a) - key(b) || a.pi - b.pi);
+        for (const p of list) {
+          if (p.role === "eye" && blink) continue;
+          const big = p.w * p.h > 0.12 && p.role !== "eye";
           const color = (glitch && Math.floor(now / 80) % 2) || hurt ? "#ff4b3e" : p.c;
-          this.box(wx, wy, p.z * ent.scale + (p.lift || 0), p.w * ent.scale, p.d * ent.scale, p.h * ent.scale, color,
-            p.role === "beam" ? 0.55 : 1, "rgba(0,0,0,0.28)", big ? 2 : 0);
-        } });
-      }
+          this.box(ent.x + p.x * ent.scale, ent.y + p.y * ent.scale, p.z * ent.scale + (p.lift || 0),
+            p.w * ent.scale, p.d * ent.scale, p.h * ent.scale, color,
+            p.role === "beam" ? 0.55 : 1, "rgba(0,0,0,0.28)", big ? 2 : 0, p.pi * 7.31 + ent.oid.length);
+        }
+      } });
       const top = Math.max(...ent.parts.map((p) => p.z + p.h)) * ent.scale;
       const [sx, sy] = this.project(ent.x + 0.5 * ent.scale, ent.y + 0.5 * ent.scale, top);
       const [bx, by] = this.project(ent.x + 0.5 * ent.scale, ent.y + 0.5 * ent.scale, 0);
@@ -1105,11 +1112,18 @@ export class World {
       this.box(cx - 0.25, cy - 0.25, 0.3, 1.5, 1.5, 0.05, "#a8322a", 1, null);
       this.box(cx - 0.251, cy + 1.249, 0.22, 1.502, 0.002, 0.08, "#f2c14e", 1, null);
     } });
-    for (const p of crierParts(pose, now)) {
-      list.push({ d: this.depthOf(cx + p.x + p.w / 2, cy + p.y + p.d / 2, p.z + 0.35), fn: () => {
-        this.box(cx + p.x, cy + p.y, 0.35 + p.z + jump, p.w, p.d, p.h, p.c, 1, "rgba(0,0,0,0.25)", p.w * p.h > 0.12 ? 2 : 0);
-      } });
-    }
+    // The crier is drawn as one block: legs first (everything else is above
+    // them), then the other parts from back to front. Sorting every part
+    // with the rest of the world made some of them pop in and out.
+    list.push({ d: this.depthOf(cx + 0.5, cy + 0.5, 0) + 0.01, fn: () => {
+      const parts = crierParts(pose, now).map((p, pi) => ({ ...p, pi }));
+      const leg = (p) => (p.role === "legL" || p.role === "legR" ? 0 : 1);
+      const key = (p) => this.depthOf(p.x + p.w / 2, p.y + p.d / 2, p.z);
+      parts.sort((a, b) => leg(a) - leg(b) || key(a) - key(b) || a.pi - b.pi);
+      for (const p of parts) {
+        this.box(cx + p.x, cy + p.y, 0.35 + p.z + jump, p.w, p.d, p.h, p.c, 1, "rgba(0,0,0,0.25)", p.w * p.h > 0.12 ? 2 : 0, p.pi * 5.17);
+      }
+    } });
     list.push({ d: this.depthOf(cx - 0.6, cy + 0.9, 0), fn: () => {
       this.box(cx - 0.75, cy + 0.75, 0, 0.1, 0.1, 1.6, "#6b4527");
       this.box(cx - 0.95, cy + 0.72, 1.15, 0.5, 0.06, 0.4, "#a8322a", 1, "rgba(0,0,0,0.3)");
@@ -1122,13 +1136,13 @@ export class World {
     const shake = now - b.hit < 400 ? Math.sin(now / 20) * 0.15 : 0;
     const float = Math.sin(now / 500) * 0.1;
     const { parts } = buildParts(b.model, {}, {});
-    for (const p of parts) {
+    parts.forEach((p, pi) => {
       const [bx, by] = SD(14, 11.5);
       list.push({ d: this.depthOf(bx + p.x * 2, by + p.y * 2, p.z), fn: () => {
         this.box(bx - 0.4 + shake + p.x * 1.8, by - 0.4 + p.y * 1.8, p.z * 1.8 + float, p.w * 1.8, p.d * 1.8, p.h * 1.8,
-          now - b.hit < 300 ? "#ff5040" : p.c, 1, "rgba(0,0,0,0.3)", 2);
+          now - b.hit < 300 ? "#ff5040" : p.c, 1, "rgba(0,0,0,0.3)", 2, pi * 3.7);
       } });
-    }
+    });
   }
 
   drawOverlay(now) {
