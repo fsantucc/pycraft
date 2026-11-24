@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from . import pedagogy, static_checks
+from . import achievements, pedagogy, static_checks
 from .curriculum import LEVELS, ORDER, public_curriculum
 from .progress import ProgressStore
 
@@ -62,6 +62,9 @@ class PyCraftHandler(BaseHTTPRequestHandler):
             elif url.path == "/api/progress":
                 with self.store.lock:
                     self.send_json(self.store.summary())
+            elif url.path == "/api/stats":
+                with self.store.lock:
+                    self.send_json(achievements.summary(self.store))
             elif url.path == "/api/code":
                 query = parse_qs(url.query)
                 level_id = query.get("level", [""])[0]
@@ -107,6 +110,7 @@ class PyCraftHandler(BaseHTTPRequestHandler):
             "/api/save": self.api_save,
             "/api/review": self.api_review,
             "/api/reset": self.api_reset,
+            "/api/event": self.api_event,
         }
         handler = routes.get(url.path)
         if handler is None:
@@ -124,9 +128,29 @@ class PyCraftHandler(BaseHTTPRequestHandler):
         entry = str(data.get("entry", "main.py"))
         if entry not in files:
             raise ValueError("Fichier d'entrée introuvable.")
-        return pedagogy.run_code(files, entry,
-                                 pedagogy.clean_lines(data.get("stdin")),
-                                 pedagogy.clean_lines(data.get("argv")))
+        result = pedagogy.run_code(files, entry,
+                                   pedagogy.clean_lines(data.get("stdin")),
+                                   pedagogy.clean_lines(data.get("argv")))
+        if not data.get("track"):
+            return result  # automatic replay: not counted in the stats
+        level = data.get("level")
+        level_id = level if isinstance(level, str) and level in LEVELS \
+            else None
+        error = result.get("error")
+        with self.store.lock:
+            achievements.record_run(self.store, level_id,
+                                    error.get("type") if error else None)
+            result["achievements_new"] = achievements.unlock_new(self.store)
+            self.store.save()
+        return result
+
+    def api_event(self, data: dict[str, Any]) -> dict[str, Any]:
+        kind = str(data.get("kind", ""))
+        with self.store.lock:
+            achievements.record_event(self.store, kind, data)
+            new = achievements.unlock_new(self.store)
+            self.store.save()
+        return {"achievements_new": new}
 
     def api_check(self, data: dict[str, Any]) -> dict[str, Any]:
         level_id = self.level_id(data)

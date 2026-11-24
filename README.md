@@ -104,6 +104,20 @@ le quiz.
 monde, tableau de bord des 129 notions (découvertes / à revoir / maîtrisées), historique
 des missions. Sauvegarde automatique dans `saves/progress.json`.
 
+**Statistiques et succès** (bouton *Progression*) : temps de jeu, exécutions, erreurs
+rencontrées et corrigées, missions sans indice, erreurs les plus fréquentes, temps par
+notion, et 17 succès dont la plupart sont cachés jusqu'à leur déblocage.
+
+**Erreurs guidées** : quand ton programme plante, la console explique l'erreur en
+français puis pose des questions, une à la fois, pour t'aider à trouver la cause, sans
+jamais donner la correction. *Montrer sur la carte* entoure dans le monde les objets,
+classes et variables en cause.
+
+**Sons** : cloche du crieur, apparition d'objets, appels, exceptions, victoire… tous
+générés par le navigateur (aucun fichier). Bouton 🔊/🔇 en haut à droite.
+
+**Visite guidée** : proposée au premier lancement, rejouable avec le bouton **?**.
+
 ## Contenu
 
 Voir **`docs/ANALYSE_ET_PROGRAMME.md`** : analyse des quatre sujets, inventaire des
@@ -126,10 +140,15 @@ pycraft/
 │   ├── progress.py             XP, statuts, notions, sauvegarde JSON
 │   ├── static_checks.py        analyse AST (règles de mission) + revue qualité
 │   ├── errors_fr.py            explication des erreurs Python en français
+│   ├── achievements.py         statistiques et succès
 │   └── curriculum/             régions, niveaux, missions, quiz (données)
 ├── web/                        interface (HTML/CSS/JS sans dépendance)
-│   └── js/  main · editor · world · models · trace · inspector · diagram · lesson
+│   └── js/  main · editor · world · models · fx · trace · inspector · diagram
+│            lesson · tour · sound · util
 ├── tests/                      pytest (+ solutions de référence : SPOILERS)
+│   ├── test_frontend.py        JS : syntaxe, imports, ids, tests unitaires,
+│   │                           test dans un vrai navigateur (si Chrome présent)
+│   └── js/                     tests unitaires JavaScript (node --test)
 └── docs/ANALYSE_ET_PROGRAMME.md
 ```
 

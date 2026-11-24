@@ -4,13 +4,13 @@
 import { api, el, esc, md, toast } from "./util.js";
 
 export const STEPS = [
-  { key: "story", label: "1 Découverte" },
-  { key: "explain", label: "2 Explication" },
-  { key: "demo", label: "3 Démo" },
-  { key: "experiment", label: "4 Essais" },
-  { key: "mission", label: "5 Mission" },
-  { key: "quiz", label: "6 Vérification" },
-  { key: "mastery", label: "7 Maîtrise" },
+  { key: "story", label: "1 Découverte", short: "Histoire" },
+  { key: "explain", label: "2 Explication", short: "Cours" },
+  { key: "demo", label: "3 Démo", short: "Démo" },
+  { key: "experiment", label: "4 Essais", short: "Essais" },
+  { key: "mission", label: "5 Mission", short: "Mission" },
+  { key: "quiz", label: "6 Vérification", short: "Quiz" },
+  { key: "mastery", label: "7 Maîtrise", short: "Bilan" },
 ];
 
 const STATUS_TEXT = {
@@ -60,25 +60,44 @@ export class LessonPanel {
       el("div", { class: "region" }, `${region.name} · niveau ${level.number}`),
       el("h2", {}, level.title, level.boss ? el("span", { class: "boss-tag" }, "BOSS") : null),
       el("div", { class: "small muted" }, `${STATUS_TEXT[st.status] || ""}${st.xp ? ` · ${st.xp} XP gagnés` : ""}`)));
-    const stepper = el("div", { class: "stepper" });
+    const stepper = el("div", { class: "stepper", role: "tablist" });
     const seen = st.steps_seen || [];
-    STEPS.forEach((s) => {
-      const done = seen.includes(s.key) || (s.key === "mission" && st.mission_passed);
+    STEPS.forEach((s, i) => {
+      const done = seen.includes(s.key) || (s.key === "mission" && st.mission_passed)
+        || (s.key === "quiz" && ["completed", "mastered"].includes(st.status));
+      const open = this.reachable(s.key);
+      const [num, ...words] = s.label.split(" ");
+      const name = words.join(" ");
       stepper.append(el("button", {
         class: `${this.app.step === s.key ? "active" : ""} ${done ? "done" : ""}`,
-        disabled: !this.reachable(s.key),
-        title: this.reachable(s.key) ? "" : "Termine d'abord l'étape précédente",
+        disabled: !open,
+        role: "tab",
+        "aria-selected": this.app.step === s.key ? "true" : "false",
+        title: open ? `Étape ${i + 1} : ${name}` : `${name} — termine d'abord l'étape précédente`,
         onclick: () => this.app.goStep(s.key),
-      }, s.label));
+      }, el("span", { class: "n" }, !open ? "🔒" : done && this.app.step !== s.key ? "✓" : num), el("span", { class: "t" }, s.short)));
     });
     root.append(stepper);
-    const body = el("div", { class: "md" });
+    const body = el("div", { class: "md lesson-body" });
     root.append(body);
+    // Sticky action bar: the main action of the step is always visible at
+    // the bottom of the panel, whatever the scroll position.
+    const index = STEPS.findIndex((x) => x.key === this.app.step);
+    this.footInfo = el("span", { class: "foot-info" }, `Étape ${index + 1}/7 · ${STEPS[index].label.split(" ").slice(1).join(" ")}`);
+    this.footBtns = el("div", { class: "foot-btns" });
+    this.foot = el("div", { class: "lesson-foot" }, this.footInfo, this.footBtns);
     this[`render_${this.app.step}`](body, st);
+    if (this.footBtns.childElementCount) root.append(this.foot);
   }
 
+  // The "go on" button of a step lives in the sticky bar.
   next(label, step) {
-    return el("div", { class: "next-row" }, el("button", { class: "mc-btn primary", onclick: () => this.app.goStep(step) }, label));
+    this.footBtns.append(el("button", { class: "mc-btn primary", onclick: () => this.app.goStep(step) }, label));
+    return "";
+  }
+
+  footButton(button) {
+    this.footBtns.append(button);
   }
 
   render_story(body) {
@@ -169,9 +188,8 @@ export class LessonPanel {
     body.append(el("h4", {}, "Ce qui sera vérifié"), list);
     if (this.lastCheck) {
       if (this.lastCheck.passed) {
-        body.append(el("div", { class: "card ok" }, el("h4", {}, "✔ Mission réussie !"),
-          el("p", {}, "Le code passe toutes les vérifications, y compris avec des valeurs que le jeu a inventées. Prouve maintenant que tu comprends."),
-          el("button", { class: "mc-btn primary", onclick: () => this.app.goStep("quiz") }, "Vérification →")));
+        body.append(el("div", { class: "card ok success-card" }, el("h4", {}, "✔ Mission réussie !"),
+          el("p", {}, "Le code passe toutes les vérifications, y compris avec des valeurs que le jeu a inventées. Prouve maintenant que tu comprends.")));
       } else {
         const failed = this.lastCheck.results.filter((r) => !r.ok).length;
         body.append(el("div", { class: "card err" }, el("h4", {}, `${failed} vérification(s) à corriger`),
@@ -182,13 +200,16 @@ export class LessonPanel {
     (st.hints_used ? this.hints : []).forEach((h, i) => hintBox.append(el("div", { class: "card hint" }, el("h4", {}, `Indice ${i + 1}`), el("p", {}, h))));
     body.append(hintBox);
     const hintsLeft = level.hints_count - (st.hints_used || 0);
-    body.append(el("div", { class: "next-row" },
-      el("button", {
-        class: "tiny", disabled: hintsLeft <= 0,
-        title: "Chaque indice réduit un peu l'XP de la mission",
-        onclick: () => this.askHint(),
-      }, hintsLeft > 0 ? `💡 Indice (${st.hints_used || 0}/${level.hints_count})` : "Plus d'indice"),
-      el("button", { class: "mc-btn gold", onclick: () => this.app.checkMission() }, "✔ Vérifier la mission")));
+    this.footButton(el("button", {
+      class: "tiny", disabled: hintsLeft <= 0,
+      title: "Chaque indice réduit un peu l'XP de la mission",
+      onclick: () => this.askHint(),
+    }, hintsLeft > 0 ? `💡 Indice (${st.hints_used || 0}/${level.hints_count})` : "Plus d'indice"));
+    const passed = this.lastCheck ? this.lastCheck.passed : st.mission_passed;
+    // Once the mission is passed, the main action becomes "go on"; checking
+    // again stays possible with the button under the editor.
+    if (passed) this.next("Vérification →", "quiz");
+    else this.footButton(el("button", { class: "mc-btn gold js-check", onclick: () => this.app.checkMission() }, "✔ Vérifier la mission"));
     if (this.lastCheck && this.lastCheck.suggest_hint) {
       body.append(el("p", { class: "small muted" }, "Plusieurs essais sans succès : un indice peut t'aider à débloquer ton raisonnement (sans te donner la solution)."));
     }
@@ -217,9 +238,14 @@ export class LessonPanel {
   render_quiz(body, st) {
     const { level } = this.app;
     body.append(el("p", {}, "Un niveau n'est pas maîtrisé parce que le code passe : il faut pouvoir ", el("b", {}, "prédire"), " et ", el("b", {}, "expliquer"), "."));
+    const ok = level.quiz.filter((_, i) => (st.quiz[String(i)] || {}).correct).length;
+    body.append(el("div", { class: "quiz-progress" },
+      el("span", {}, `Réponses validées : ${ok}/${level.quiz.length}`),
+      el("div", { class: "bar" }, el("span", { class: "bar-fill", style: `width:${100 * ok / Math.max(1, level.quiz.length)}%` }))));
     level.quiz.forEach((q, index) => body.append(this.question(q, index, st)));
-    const done = level.quiz.every((_, i) => (st.quiz[String(i)] || {}).correct);
-    if (done) body.append(this.next("Bilan de maîtrise →", "mastery"));
+    const done = ok === level.quiz.length;
+    this.footInfo.textContent = done ? "Toutes les réponses sont validées ✓" : `Vérification · ${ok}/${level.quiz.length} validées`;
+    if (done) this.next("Bilan de maîtrise →", "mastery");
   }
 
   question(q, index, st) {
@@ -282,7 +308,14 @@ export class LessonPanel {
       (res.rewards || []).forEach((r) => toast(`🏆 Récompense : ${r}`, "xp"));
       this.app.progress = res.progress;
       this.app.updateTopbar();
+      const scroll = this.root.scrollTop;
       this.render();
+      this.root.scrollTop = scroll;
+      // After a right answer, bring the next question into view.
+      if (res.correct) {
+        const next = [...this.root.querySelectorAll(".q")].find((b, i) => i > index && !b.classList.contains("correct"));
+        if (next) next.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
     } catch (err) {
       toast(err.message, "bad");
     }
@@ -304,13 +337,11 @@ export class LessonPanel {
       chips.append(el("span", { class: `notion-chip st-${s}` }, `${n} · ${this.app.curriculum.notions[n]}`));
     });
     body.append(chips);
-    const row = el("div", { class: "next-row" });
     if (!mastered) {
-      row.append(el("button", { class: "tiny", onclick: () => this.app.startReview() }, "🔁 Défi de maîtrise (refaire le quiz)"));
+      this.footButton(el("button", { class: "tiny", onclick: () => this.app.startReview() }, "🔁 Défi de maîtrise"));
     }
     const nextId = this.app.nextLevelId(level.id);
-    if (nextId) row.append(el("button", { class: "mc-btn primary", onclick: () => this.app.openLevel(nextId) }, "Niveau suivant →"));
-    else row.append(el("span", { class: "muted" }, "Tu as terminé PyCraft. Bravo !"));
-    body.append(row);
+    if (nextId) this.footButton(el("button", { class: "mc-btn primary", onclick: () => this.app.openLevel(nextId) }, "Niveau suivant →"));
+    else body.append(el("p", { class: "muted" }, "Tu as terminé PyCraft. Bravo !"));
   }
 }

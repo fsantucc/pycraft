@@ -9,12 +9,123 @@ import re
 from typing import Any
 
 
-def explain(error: dict[str, Any], files: dict[str, str]) -> dict[str, str]:
+def explain(error: dict[str, Any], files: dict[str, str]) -> dict[str, Any]:
     kind = error.get("type", "")
     message = error.get("message", "")
     line_text = _line(error, files)
     what, why, hint = _rules(kind, message, line_text)
-    return {"what": what, "why": why, "hint": hint, "code": line_text}
+    questions, experiment = _guide(kind, message, line_text)
+    return {"what": what, "why": why, "hint": hint, "code": line_text,
+            "questions": [hint] + [q for q in questions if q != hint],
+            "experiment": experiment,
+            "suspects": _suspects(kind, message, line_text)}
+
+
+# Python keywords and builtins are never "suspects" to look at on the map.
+_NOT_NAMES = {
+    "False", "None", "True", "and", "as", "assert", "break", "class",
+    "continue", "def", "del", "elif", "else", "except", "finally", "for",
+    "from", "global", "if", "import", "in", "is", "lambda", "nonlocal",
+    "not", "or", "pass", "raise", "return", "try", "while", "with", "yield",
+    "print", "len", "range", "int", "str", "float", "list", "dict", "set",
+    "tuple", "input", "type", "isinstance", "super", "self", "open", "sum",
+    "min", "max", "abs", "round", "sorted", "enumerate", "zip", "next",
+    "iter", "bool", "f",
+}
+
+
+def _suspects(kind: str, message: str, code: str) -> list[str]:
+    """Names worth looking at on the map / in the inspector."""
+    names: list[str] = []
+    for found in re.findall(r"'(\w+)'", message):
+        if found not in names and found not in _NOT_NAMES:
+            names.append(found)
+    code_only = re.sub(r"(\"[^\"]*\"|'[^']*')", "", code)
+    for found in re.findall(r"[A-Za-z_]\w*", code_only):
+        if found not in names and found not in _NOT_NAMES \
+                and not found.isdigit():
+            names.append(found)
+    return names[:6]
+
+
+def _guide(kind: str, message: str, code: str) -> tuple[list[str], str]:
+    """Follow-up questions (from general to precise) and one experiment.
+
+    Like a tutor: they narrow down where to look, they never give the
+    corrected code.
+    """
+    step_tip = ("Recule pas à pas (◀) jusqu'à juste avant l'erreur et "
+                "regarde l'onglet Inspecteur.")
+    if kind == "NameError":
+        return (["Où ce nom est-il créé dans ton fichier ? Avant ou après "
+                 "cette ligne ?",
+                 "Si c'est dans une fonction : est-il créé dans *cette* "
+                 "fonction, ou ailleurs ?",
+                 "Compare lettre par lettre les deux endroits : même "
+                 "majuscule, même orthographe ?"],
+                "Utilise Ctrl+F (ou relis ton code) pour trouver toutes les "
+                "fois où ce nom apparaît.")
+    if kind == "AttributeError":
+        return (["Sur quel objet porte le `.` de cette ligne ? De quelle "
+                 "classe est-il ?",
+                 "Dans la classe, quelle méthode crée cet attribut avec "
+                 "`self.... = ` ? A-t-elle déjà été appelée à ce moment ?",
+                 "L'attribut porte-t-il exactement le même nom aux deux "
+                 "endroits (avec ou sans `_`) ?"],
+                "Clique sur l'objet dans le monde : l'inspecteur montre ses "
+                "attributs réels juste avant l'erreur.")
+    if kind == "TypeError":
+        return (["Quel est le type de chaque valeur utilisée sur cette "
+                 "ligne ?",
+                 "Combien de valeurs l'appel donne-t-il, et combien la "
+                 "définition en attend-elle ?",
+                 "Si c'est une méthode : `self` est-il bien le premier "
+                 "paramètre ?"],
+                "Ajoute temporairement print(type(...)) sur la valeur "
+                "suspecte juste avant la ligne, puis relance.")
+    if kind in ("IndentationError", "TabError", "SyntaxError"):
+        return (["L'erreur est-elle vraiment sur cette ligne, ou sur la "
+                 "ligne juste avant ?",
+                 "Chaque ligne qui ouvre un bloc se termine-t-elle par `:` ?",
+                 "Les parenthèses et guillemets ouverts sont-ils tous "
+                 "fermés ?"],
+                "Mets la ligne précédente en commentaire (#) pour voir si "
+                "l'erreur change de place.")
+    if kind == "ZeroDivisionError":
+        return (["D'où vient la valeur du diviseur ?",
+                 "Dans quel cas peut-elle valoir 0 ?",
+                 "Que doit faire ton programme dans ce cas-là ?"],
+                step_tip)
+    if kind in ("RecursionError",):
+        return (["Quelle fonction apparaît en boucle dans la pile "
+                 "d'appels ?",
+                 "Quelle condition devrait arrêter les appels ?",
+                 "Chaque appel se rapproche-t-il vraiment de cette "
+                 "condition ?"],
+                "Regarde la tour « pile d'appels » sur la carte : quel "
+                "étage se répète ?")
+    if kind in ("Timeout", "StepLimitReached"):
+        return (["Quelle variable la condition de ta boucle teste-t-elle ?",
+                 "Cette variable change-t-elle à chaque tour ?",
+                 "Change-t-elle dans le bon sens pour que la condition "
+                 "devienne fausse ?"],
+                "Ajoute un print() de cette variable dans la boucle et "
+                "observe les premières valeurs.")
+    if kind in ("IndexError", "KeyError"):
+        return (["Que contient la collection à ce moment-là ?",
+                 "Quel index (ou quelle clé) demandes-tu exactement ?",
+                 "Dans quel cas cette valeur peut-elle sortir des limites ?"],
+                "Regarde la collection sur la carte au pas juste avant "
+                "l'erreur : combien d'éléments, quelles clés ?")
+    if kind in ("ValueError", "UnboundLocalError", "StopIteration",
+                "EOFError"):
+        return (["Quelle valeur cette ligne reçoit-elle réellement ?",
+                 "D'où vient cette valeur ?",
+                 "Quel cas ton programme n'a-t-il pas prévu ?"],
+                step_tip)
+    return (["Que fait cette ligne, en une phrase ?",
+             "Quelle valeur y est différente de ce que tu imaginais ?"],
+            step_tip)
 
 
 def _line(error: dict[str, Any], files: dict[str, str]) -> str:

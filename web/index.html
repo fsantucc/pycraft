@@ -20,6 +20,8 @@
   <nav>
     <button id="btn-map" class="mc-btn">Carte du monde</button>
     <button id="btn-progress" class="mc-btn">Progression</button>
+    <button id="btn-tour" class="mc-btn icon" title="Visite guidée de l'interface">?</button>
+    <button id="btn-sound" class="mc-btn icon" title="Couper les sons">🔊</button>
   </nav>
 </header>
 
@@ -62,6 +64,8 @@
     </div>
   </section>
 
+  <div class="gutter" data-side="left" title="Glisser pour redimensionner · double-clic : taille par défaut" role="separator" aria-orientation="vertical"></div>
+
   <!-- ======================= CENTER : world ======================= -->
   <section id="center" class="panel">
     <div id="world-wrap">
@@ -94,6 +98,8 @@
     </div>
     <div id="event-log" class="event-log"></div>
   </section>
+
+  <div class="gutter" data-side="right" title="Glisser pour redimensionner · double-clic : taille par défaut" role="separator" aria-orientation="vertical"></div>
 
   <!-- ======================= RIGHT : lesson / inspector ======================= -->
   <section id="right" class="panel">

@@ -7,6 +7,10 @@ export async function api(path, body) {
   const response = await fetch(path, options);
   const data = await response.json().catch(() => ({ error: "Réponse illisible du serveur." }));
   if (!response.ok) throw new Error(data.error || `Erreur ${response.status}`);
+  // Any answer may unlock achievements: the app shows them in one place.
+  if (data && Array.isArray(data.achievements_new) && data.achievements_new.length) {
+    window.dispatchEvent(new CustomEvent("pycraft:achievements", { detail: data.achievements_new }));
+  }
   return data;
 }
 
@@ -92,10 +96,45 @@ export function md(source) {
   return html;
 }
 
+// Notifications. They appear at the top of the screen, never block a click
+// (pointer-events: none in the CSS), stack at most 3 deep, and consecutive
+// "+N XP" messages are merged into one.
+const TOAST_MAX = 3;
+
+function dismissToast(box) {
+  if (box.classList.contains("out")) return;
+  box.classList.add("out");
+  setTimeout(() => box.remove(), 260);
+}
+
+export function pushToast(content, kind = "", life = 3200) {
+  const root = document.getElementById("toasts");
+  const box = el("div", { class: `toast ${kind}`, role: "status" }, content,
+    el("span", { class: "toast-life", style: `animation-duration:${life}ms` }));
+  root.append(box);
+  const alive = [...root.children].filter((t) => !t.classList.contains("out"));
+  alive.slice(0, Math.max(0, alive.length - TOAST_MAX)).forEach(dismissToast);
+  box.dataset.timer = String(setTimeout(() => dismissToast(box), life));
+  return box;
+}
+
 export function toast(text, kind = "") {
-  const box = el("div", { class: `toast ${kind}` }, text);
-  document.getElementById("toasts").append(box);
-  setTimeout(() => box.remove(), 4200);
+  const root = document.getElementById("toasts");
+  const xp = /^\+(\d+) XP$/.exec(String(text));
+  const last = root.lastElementChild;
+  if (xp && last && last.dataset.xp && !last.classList.contains("out")) {
+    const total = Number(last.dataset.xp) + Number(xp[1]);
+    last.dataset.xp = String(total);
+    last.firstChild.textContent = `+${total} XP`;
+    last.classList.remove("bump");
+    void last.offsetWidth;
+    last.classList.add("bump");
+    clearTimeout(Number(last.dataset.timer));
+    last.dataset.timer = String(setTimeout(() => dismissToast(last), 3200));
+    return;
+  }
+  const box = pushToast(el("span", {}, text), kind, kind === "bad" ? 4200 : 3200);
+  if (xp) box.dataset.xp = xp[1];
 }
 
 // Serialized Python values (from the sandbox) → short text.

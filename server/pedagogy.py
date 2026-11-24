@@ -7,6 +7,7 @@ from typing import Any
 from . import sandbox, static_checks
 from .curriculum import LEVELS
 from .curriculum.model import Level
+from . import achievements
 from .errors_fr import explain
 from .progress import QUIZ_FIRST_TRY_XP, QUIZ_RETRY_XP, ProgressStore
 
@@ -108,6 +109,10 @@ def check_mission(store: ProgressStore, level_id: str,
     gained: list[dict[str, Any]] = []
     with store.lock:
         state = store.level(level_id)
+        already_passed = bool(state["mission_passed"])
+        error = trace.get("error")
+        achievements.record_run(store, level_id,
+                                error.get("type") if error else None)
         state["attempts"] += 1
         state["code"] = files
         state["history"].append({
@@ -126,9 +131,13 @@ def check_mission(store: ProgressStore, level_id: str,
                                      max(20, level.xp // 4))
                 gained.append({"label": "Bonus code propre", "xp": bonus})
         rewards = store.check_rewards()
+        achievements.record_check(store, level_id, passed, already_passed,
+                                  state["attempts"])
+        new_achievements = achievements.unlock_new(store)
         store.save()
         summary = store.summary()
     return {
+        "achievements_new": new_achievements,
         "passed": passed, "results": results, "trace": trace,
         "quality": quality, "xp_gained": gained, "rewards": rewards,
         "progress": summary,
@@ -215,6 +224,7 @@ def grade_question(store: ProgressStore, level_id: str, index: int,
         if store.quiz_done(level_id):
             state["reviewing"] = False
         response["rewards"] = store.check_rewards()
+        response["achievements_new"] = achievements.unlock_new(store)
         store.save()
         response["progress"] = store.summary()
     return response

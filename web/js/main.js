@@ -3,12 +3,29 @@ import { renderDiagram } from "./diagram.js";
 import { Editor } from "./editor.js";
 import { Inspector } from "./inspector.js";
 import { LessonPanel, STEPS } from "./lesson.js";
+import { sound } from "./sound.js";
+import { Tour } from "./tour.js";
 import { TraceModel, describe } from "./trace.js";
-import { api, el, esc, md, showValue, toast } from "./util.js";
+import { api, el, esc, md, pushToast, showValue, toast } from "./util.js";
 import { World } from "./world.js";
 
 const $ = (id) => document.getElementById(id);
 const BOSS_MODELS = { r1: "Creeper", r2: "Enderman", r3: "Golem", r4: "Wither", r5: "Alchemist", r6: "Dragon", r7: "Castle" };
+
+// Show that a button is working (and block double clicks) until the
+// returned function is called.
+function busy(button, label) {
+  if (!button) return () => {};
+  const before = button.innerHTML;
+  button.disabled = true;
+  button.classList.add("busy");
+  button.textContent = label;
+  return () => {
+    button.disabled = false;
+    button.classList.remove("busy");
+    if (button.textContent === label) button.innerHTML = before;
+  };
+}
 
 class App {
   constructor() {
@@ -62,10 +79,57 @@ class App {
     const target = remembered && this.progress.levels[remembered] && this.progress.levels[remembered].status !== "locked"
       ? remembered : firstOpen;
     await this.openLevel(target);
+    this.startTracking();
     if (!localStorage.getItem("pycraft.welcomed")) {
       localStorage.setItem("pycraft.welcomed", "1");
       this.showWelcome();
     }
+  }
+
+  // ----------------------------------------------------- stats & sounds
+  // Play time is counted only while the tab is visible and the player did
+  // something in the last 2 minutes (no counting when you walk away).
+  startTracking() {
+    const d = new Date();
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    this.sendEvent({ kind: "session", date, hour: d.getHours() });
+    this.lastActivity = Date.now();
+    for (const name of ["keydown", "pointerdown", "wheel"]) {
+      window.addEventListener(name, () => { this.lastActivity = Date.now(); }, { passive: true });
+    }
+    setInterval(() => {
+      if (document.hidden || !this.level || Date.now() - this.lastActivity > 120000) return;
+      this.sendEvent({ kind: "time", level: this.level.id, seconds: 30 });
+    }, 30000);
+  }
+
+  sendEvent(payload) {
+    api("/api/event", payload).catch(() => {});
+  }
+
+  countStep() {
+    this.pendingSteps = (this.pendingSteps || 0) + 1;
+    clearTimeout(this.stepTimer);
+    this.stepTimer = setTimeout(() => {
+      this.sendEvent({ kind: "steps", count: this.pendingSteps });
+      this.pendingSteps = 0;
+    }, 2500);
+  }
+
+  onAchievements(list) {
+    list.forEach((a, i) => setTimeout(() => {
+      sound.play("achievement");
+      this.world.celebrate();
+      pushToast(el("div", { class: "ach-row" },
+        el("div", { class: "ach-icon" }, a.icon),
+        el("div", {}, el("div", { class: "ach-title" }, `Succès débloqué : ${a.name}`), el("div", { class: "small" }, a.description))),
+      "ach", 5200);
+    }, i * 1400));
+  }
+
+  updateMuteButton() {
+    $("btn-sound").textContent = sound.muted ? "🔇" : "🔊";
+    $("btn-sound").title = sound.muted ? "Activer les sons" : "Couper les sons";
   }
 
   async refreshProgress() {
@@ -79,6 +143,15 @@ class App {
     const span = Math.max(1, p.level_next - p.level_floor);
     $("xp-fill").style.width = `${Math.min(100, 100 * (p.xp - p.level_floor) / span)}%`;
     $("xp-text").textContent = `${p.xp} XP`;
+    const left = Math.max(0, p.level_next - p.xp);
+    document.querySelector("#topbar .xp").title = `${p.xp} XP au total · encore ${left} XP pour le niveau ${p.player_level + 1}`;
+    if (this.lastXp !== undefined && p.xp > this.lastXp) {
+      const box = document.querySelector("#topbar .xp");
+      box.classList.remove("gain");
+      void box.offsetWidth;
+      box.classList.add("gain");
+    }
+    this.lastXp = p.xp;
     const iconOf = {};
     (this.curriculum ? this.curriculum.regions : []).forEach((r) => { iconOf[r.reward] = r.icon; });
     $("rewards").innerHTML = p.rewards.map((r) => `<span title="${esc(r)}">${iconOf[r] || "★"}</span>`).join("");
@@ -107,8 +180,55 @@ class App {
     $("io-summary").textContent = parts.length ? `(${parts.join(", ")})` : "(aucune)";
   }
 
+  // Drag the thin bars between the three panels to resize them. The sizes
+  // are remembered; a double click restores the default layout.
+  bindGutters() {
+    const layout = $("layout");
+    const apply = (side, px) => layout.style.setProperty(side === "left" ? "--col-l" : "--col-r", px ? `${px}px` : "");
+    let saved = {};
+    try {
+      saved = JSON.parse(localStorage.getItem("pycraft.cols") || "{}");
+    } catch (err) {
+      saved = {};
+    }
+    for (const side of ["left", "right"]) if (saved[side]) apply(side, saved[side]);
+    document.querySelectorAll(".gutter").forEach((gutter) => {
+      const side = gutter.dataset.side;
+      gutter.addEventListener("dblclick", () => {
+        delete saved[side];
+        apply(side, 0);
+        localStorage.setItem("pycraft.cols", JSON.stringify(saved));
+      });
+      gutter.addEventListener("pointerdown", (down) => {
+        down.preventDefault();
+        gutter.setPointerCapture(down.pointerId);
+        document.body.classList.add("resizing");
+        const box = layout.getBoundingClientRect();
+        const move = (e) => {
+          const raw = side === "left" ? e.clientX - box.left : box.right - e.clientX;
+          const px = Math.round(Math.max(260, Math.min(box.width * 0.45, raw)));
+          saved[side] = px;
+          apply(side, px);
+        };
+        const up = () => {
+          gutter.removeEventListener("pointermove", move);
+          gutter.removeEventListener("pointerup", up);
+          document.body.classList.remove("resizing");
+          localStorage.setItem("pycraft.cols", JSON.stringify(saved));
+        };
+        gutter.addEventListener("pointermove", move);
+        gutter.addEventListener("pointerup", up);
+      });
+    });
+  }
+
   bindUi() {
+    this.bindGutters();
     $("btn-run").addEventListener("click", () => this.runCurrent());
+    $("btn-sound").addEventListener("click", () => { sound.setMuted(!sound.muted); this.updateMuteButton(); sound.play("click"); });
+    $("btn-tour").addEventListener("click", () => this.startTour());
+    this.updateMuteButton();
+    window.addEventListener("pycraft:achievements", (e) => this.onAchievements(e.detail));
     $("btn-check").addEventListener("click", () => this.checkMission());
     $("btn-quality").addEventListener("click", () => this.quality());
     $("btn-reset-code").addEventListener("click", () => this.resetCode());
@@ -117,8 +237,8 @@ class App {
     $("overlay-close").addEventListener("click", () => $("overlay").classList.add("hidden"));
     $("overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") $("overlay").classList.add("hidden"); });
     $("tl-play").addEventListener("click", () => (this.playing ? this.pause() : this.play()));
-    $("tl-step").addEventListener("click", () => { this.pause(); this.goto(this.index + 1, true); });
-    $("tl-back").addEventListener("click", () => { this.pause(); this.goto(this.index - 1, false); });
+    $("tl-step").addEventListener("click", () => { this.pause(); this.goto(this.index + 1, true); this.countStep(); });
+    $("tl-back").addEventListener("click", () => { this.pause(); this.goto(this.index - 1, false); this.countStep(); });
     $("tl-start").addEventListener("click", () => { this.pause(); this.goto(0, true); });
     $("tl-end").addEventListener("click", () => { this.pause(); this.goto(this.model ? this.model.count - 1 : 0, false); });
     $("tl-range").addEventListener("input", (e) => { this.pause(); this.goto(Number(e.target.value), false); });
@@ -139,10 +259,16 @@ class App {
       this.renderSide();
     }));
     window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !$("overlay").classList.contains("hidden") && !document.querySelector(".tour")) {
+        e.preventDefault();
+        $("overlay").classList.add("hidden");
+        return;
+      }
       if (e.key === "F10") {
         e.preventDefault();
         this.pause();
         this.goto(this.index + (e.shiftKey ? -1 : 1), !e.shiftKey);
+        this.countStep();
       } else if (e.key === "F5") {
         e.preventDefault();
         this.runCurrent();
@@ -328,11 +454,12 @@ class App {
     }
     const files = this.editor.getFiles();
     const helper = this.mode !== "snippet" && (this.level.readonly || []).includes("main.py") && files["main.py"] ? "main.py" : null;
-    this.execute(files, helper || this.editor.active, true);
+    this.execute(files, helper || this.editor.active, true, true);
   }
 
   clearRun() {
     this.model = null;
+    this.world.emptyHint = true;
     this.pause();
     this.world.setScene(new TraceModel({ steps: [] }, {}).stateAt(-1), {});
     $("event-log").innerHTML = "";
@@ -342,22 +469,27 @@ class App {
     this.inspector.render(null);
   }
 
-  async execute(files, entry, autoplay) {
+  // byPlayer: the player pressed Exécuter (only those runs count in the
+  // statistics, not the automatic replays of the demonstration).
+  async execute(files, entry, autoplay, byPlayer = false) {
     this.pause();
-    $("btn-run").disabled = true;
+    const done = busy($("btn-run"), "⏳ Exécution…");
     try {
       const io = this.mode === "snippet" ? (this.snippetIO || { stdin: [], argv: [] }) : this.readIO();
-      const result = await api("/api/run", { files, entry, stdin: io.stdin, argv: io.argv });
+      const level = this.mode === "snippet" ? undefined : this.level && this.level.id;
+      const result = await api("/api/run", { files, entry, stdin: io.stdin, argv: io.argv, level, track: byPlayer });
       this.loadResult(result, files, autoplay);
     } catch (err) {
       toast(err.message, "bad");
     } finally {
-      $("btn-run").disabled = false;
+      done();
     }
   }
 
   loadResult(result, files, autoplay) {
     this.model = new TraceModel(result, files);
+    // The "things will appear here" caption is only for an empty world.
+    this.world.emptyHint = !this.model.count;
     this.files = files;
     this.world.entities.clear();
     this.world.blueprints.clear();
@@ -388,14 +520,43 @@ class App {
       const err = result.error;
       const help = err.help || {};
       if (err.line) markers.errors.push({ file: err.file || "main.py", line: err.line, msg: `${err.type}: ${err.message}` });
+      // Guided explanation: one question at a time, from general to
+      // precise. The answer (the corrected code) is never given.
+      const questions = help.questions && help.questions.length ? help.questions : [help.hint || ""];
+      let shown = 1;
+      const list = el("ol", { class: "guide-q" });
+      const more = el("button", { class: "tiny" });
+      const renderQuestions = () => {
+        list.innerHTML = "";
+        questions.slice(0, shown).forEach((q) => list.append(el("li", { html: md(q).replace(/^<p>|<\/p>$/g, "") })));
+        more.textContent = `Une autre question (${questions.length - shown})`;
+        more.classList.toggle("hidden", shown >= questions.length);
+      };
+      more.addEventListener("click", () => { shown += 1; renderQuestions(); sound.play("click"); });
+      renderQuestions();
+      const suspects = help.suspects || [];
+      const showOnMap = () => {
+        if (this.model && this.model.count) {
+          this.pause();
+          this.goto(Math.max(0, this.model.count - 1), false);
+        }
+        const found = this.world.spotlight(suspects);
+        this.sendEvent({ kind: "spot" });
+        if (err.line) this.editor.gotoLine(err.file || "main.py", err.line);
+        if (!found) toast("Rien de visible sur la carte pour cette erreur : regarde la ligne surlignée.", "");
+        else sound.play("spot");
+      };
       box.append(el("div", { class: "card err" },
         el("h4", {}, `💥 ${err.type}${err.line ? ` — ligne ${err.line}${err.file && err.file !== "main.py" ? ` (${err.file})` : ""}` : ""}`),
         el("div", { class: "small muted" }, err.message),
         help.code ? el("pre", {}, help.code) : null,
         el("p", {}, el("b", {}, "Ce qui se passe : "), help.what || ""),
         el("p", {}, el("b", {}, "Pourquoi : "), help.why || ""),
-        el("p", {}, el("b", {}, "Piste : "), help.hint || ""),
-        err.line ? el("button", { class: "tiny", onclick: () => this.editor.gotoLine(err.file || "main.py", err.line) }, "Aller à la ligne") : null));
+        el("div", { class: "guide" }, el("b", {}, "🧭 Questions pour te guider"), list, more),
+        help.experiment ? el("p", { class: "small" }, el("b", {}, "🔬 Expérience : "), help.experiment) : null,
+        el("div", { class: "row-btns" },
+          suspects.length ? el("button", { class: "tiny", onclick: showOnMap }, "🔎 Montrer sur la carte") : null,
+          err.line ? el("button", { class: "tiny", onclick: () => this.editor.gotoLine(err.file || "main.py", err.line) }, "Aller à la ligne") : null)));
     }
     if (result.truncated) box.append(el("div", { class: "card" }, "La visualisation s'est arrêtée après de nombreuses étapes."));
     this.editor.setMarkers(markers);
@@ -538,7 +699,7 @@ class App {
   async checkMission() {
     if (this.mode !== "mission") await this.goStep("mission");
     await this.flushSave();
-    $("btn-check").disabled = true;
+    const done = [$("btn-check"), ...document.querySelectorAll(".js-check")].map((b) => busy(b, "⏳ Vérification…"));
     const files = this.editor.getFiles();
     try {
       const io = this.readIO();
@@ -555,23 +716,28 @@ class App {
         res.results.forEach((r, i) => setTimeout(() => this.world.hitBoss(r.ok), 300 + i * 450));
       }
       this.banner(res.passed ? "Mission réussie !" : `${res.results.filter((r) => !r.ok).length} vérification(s) échouée(s)`, !res.passed);
+      sound.play(res.passed ? "victory" : "fail");
+      if (res.passed) this.world.celebrate();
       res.xp_gained.forEach((g) => toast(`+${g.xp} XP — ${g.label}`, "xp"));
       res.rewards.forEach((r) => toast(`🏆 Récompense : ${r}`, "xp"));
       this.lesson.render();
     } catch (err) {
       toast(err.message, "bad");
     } finally {
-      $("btn-check").disabled = false;
+      done.forEach((restore) => restore());
     }
   }
 
   banner(text, bad) {
     const b = $("world-banner");
-    b.textContent = text;
+    b.innerHTML = "";
+    b.append(el("span", { class: "wb-icon" }, bad ? "⚠" : "🏆"), el("span", {}, text));
     b.classList.toggle("bad", !!bad);
-    b.classList.remove("hidden");
+    b.classList.remove("hidden", "show");
+    void b.offsetWidth;
+    b.classList.add("show");
     clearTimeout(this.bannerTimer);
-    this.bannerTimer = setTimeout(() => b.classList.add("hidden"), 3500);
+    this.bannerTimer = setTimeout(() => b.classList.add("hidden"), 3200);
   }
 
   async quality() {
@@ -612,7 +778,56 @@ Ici, **chaque ligne de Python que tu écris agit sur un monde**. Les classes app
 
 Chaque niveau suit 7 étapes : découverte, explication, démonstration, expérimentation, mission, vérification, maîtrise. Le jeu ne te donne jamais la solution : il t'aide à la trouver.
 
-Ta progression est sauvegardée automatiquement.`) }));
+Ta progression est sauvegardée automatiquement.`) },
+    el("div", { class: "row-btns center" },
+      el("button", { class: "mc-btn primary", onclick: () => { $("overlay").classList.add("hidden"); this.startTour(); } }, "🧭 Visite guidée (30 s)"),
+      el("button", { class: "mc-btn", onclick: () => $("overlay").classList.add("hidden") }, "Je connais déjà"))));
+  }
+
+  renderStats(st) {
+    const dur = (sec) => {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      return h ? `${h} h ${String(m).padStart(2, "0")}` : `${m} min`;
+    };
+    const box = el("div", { class: "stats" });
+    const tiles = [
+      ["⏱", dur(st.total_time), "de jeu"], ["▶", st.runs, "exécutions"], ["🐛", st.errors, "erreurs rencontrées"],
+      ["🔧", st.fixed, "erreurs corrigées"], ["🧠", st.no_hint, "missions sans indice"], ["🎯", st.first_try, "du premier coup"],
+      ["🔍", st.steps, "pas à pas"], ["📅", st.days, "jour(s) de jeu"],
+    ];
+    box.append(el("div", { class: "stat-tiles" }, tiles.map(([icon, value, label]) =>
+      el("div", { class: "stat-tile" }, el("div", { class: "stat-icon" }, icon), el("div", { class: "stat-value" }, String(value)), el("div", { class: "small muted" }, label)))));
+    const maxNotion = Math.max(1, ...st.per_notion.map((n) => n.seconds));
+    const bars = el("div", { class: "bars" }, el("h3", {}, "Temps par notion"),
+      st.per_notion.length ? st.per_notion.map((n) => el("div", { class: "bar-row" },
+        el("span", { class: "bar-label small", title: n.name }, `${n.id} ${n.name}`),
+        el("span", { class: "bar" }, el("span", { class: "bar-fill", style: `width:${(100 * n.seconds) / maxNotion}%` })),
+        el("span", { class: "small muted" }, dur(n.seconds))))
+        : el("p", { class: "muted small" }, "Le temps passé sur chaque notion apparaîtra ici."));
+    const errs = el("div", { class: "bars" }, el("h3", {}, "Tes erreurs les plus fréquentes"),
+      st.error_types.length ? st.error_types.slice(0, 6).map(([type, n]) => el("div", { class: "bar-row" },
+        el("span", { class: "bar-label small" }, type),
+        el("span", { class: "bar" }, el("span", { class: "bar-fill err", style: `width:${(100 * n) / st.error_types[0][1]}%` })),
+        el("span", { class: "small muted" }, `×${n}`)))
+        : el("p", { class: "muted small" }, "Aucune erreur pour l'instant… ça viendra !"));
+    box.append(el("div", { class: "dash-grid" }, bars, errs));
+    box.append(el("h3", {}, `Succès ${st.unlocked}/${st.total}`),
+      el("div", { class: "ach-grid" }, st.achievements.map((a) => el("div", { class: `ach-card ${a.unlocked ? "on" : "off"}`, title: a.description },
+        el("div", { class: "ach-icon" }, a.icon),
+        el("div", {}, el("div", { class: "ach-title" }, a.name), el("div", { class: "small muted" }, a.description))))));
+    return box;
+  }
+
+  startTour() {
+    $("overlay").classList.add("hidden");
+    if (!this.tour) {
+      this.tour = new Tour({
+        onDone: () => { this.sendEvent({ kind: "tour" }); sound.play("victory"); },
+        onSound: () => sound.play("click"),
+      });
+    }
+    this.tour.start();
   }
 
   showMap() {
@@ -636,21 +851,35 @@ Ta progression est sauvegardée automatiquement.`) }));
         el("h3", {}, region.name), el("div", { class: "sub" }, region.subtitle));
       region.levels.forEach((level) => {
         const st = this.progress.levels[level.id].status;
+        const current = this.level && this.level.id === level.id;
         card.append(el("div", {
-          class: `lvl-node ${st === "locked" ? "locked" : ""}`,
+          class: `lvl-node st-${st} ${st === "locked" ? "locked" : ""} ${current ? "current" : ""}`,
+          title: st === "locked" ? "Termine le niveau précédent pour débloquer celui-ci" : "Ouvrir ce niveau",
           onclick: () => st !== "locked" && this.openLevel(level.id),
-        }, el("span", { class: "ic" }, icon[st]), `${level.number} ${level.title}`, level.boss ? el("span", { class: "boss-tag" }, "BOSS") : null));
+        }, el("span", { class: "ic" }, icon[st]), el("span", { class: "lvl-name" }, `${level.number} ${level.title}`),
+        level.boss ? el("span", { class: "boss-tag" }, "BOSS") : null,
+        current ? el("span", { class: "here" }, "tu es ici") : null));
       });
+      const doneCount = statuses.filter((x) => x === "completed" || x === "mastered").length;
+      card.insertBefore(el("div", { class: "region-progress", title: `${doneCount}/${statuses.length} niveaux terminés` },
+        el("span", { style: `width:${100 * doneCount / statuses.length}%` })), card.children[2] || null);
       card.append(el("div", { class: "reward" }, `${region.icon} Récompense : ${region.reward}`));
       grid.append(card);
     }
     this.overlay(wrap);
+    const here = wrap.querySelector(".lvl-node.current");
+    if (here) here.scrollIntoView({ block: "center" });
   }
 
-  showDashboard() {
+  async showDashboard() {
     const p = this.progress;
     const wrap = el("div", { class: "dash" });
     wrap.append(el("h2", {}, `Progression — niveau ${p.player_level}, ${p.xp} XP`));
+    try {
+      wrap.append(this.renderStats(await api("/api/stats")));
+    } catch (err) {
+      wrap.append(el("p", { class: "muted small" }, `Statistiques indisponibles : ${err.message}`));
+    }
     const counts = Object.values(p.notions).reduce((acc, s) => ({ ...acc, [s]: (acc[s] || 0) + 1 }), {});
     wrap.append(el("div", { class: "legend small" },
       el("span", { class: "notion-chip st-mastered" }, `Maîtrisées : ${counts.mastered || 0}`),

@@ -122,18 +122,18 @@ export function speechBubble(c, x, y, text, progress, style = {}) {
   c.lineWidth = 2;
   c.stroke();
   if (tail) {
-  c.beginPath();
-  c.moveTo(tailX - 7, top + h - 1);
-  c.lineTo(tailX, top + h + 10);
-  c.lineTo(tailX + 7, top + h - 1);
-  c.closePath();
-  c.fillStyle = style.bg || "#fffdf5";
-  c.fill();
-  c.beginPath();
-  c.moveTo(tailX - 7, top + h);
-  c.lineTo(tailX, top + h + 10);
-  c.lineTo(tailX + 7, top + h);
-  c.stroke();
+    c.beginPath();
+    c.moveTo(tailX - 7, top + h - 1);
+    c.lineTo(tailX, top + h + 10);
+    c.lineTo(tailX + 7, top + h - 1);
+    c.closePath();
+    c.fillStyle = style.bg || "#fffdf5";
+    c.fill();
+    c.beginPath();
+    c.moveTo(tailX - 7, top + h);
+    c.lineTo(tailX, top + h + 10);
+    c.lineTo(tailX + 7, top + h);
+    c.stroke();
   }
   c.fillStyle = style.color || "#241a10";
   c.textBaseline = "middle";

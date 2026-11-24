@@ -3,6 +3,7 @@
 // calls). Nothing here is decorative except the terrain props.
 import { Particles, hash, nameTag, roundRect, speechBubble } from "./fx.js";
 import { buildParts, crierParts, healthOf } from "./models.js";
+import { sound } from "./sound.js";
 import { TraceModel } from "./trace.js";
 import { hashColor, showValue } from "./util.js";
 
@@ -92,6 +93,7 @@ export class World {
     this.stableFrames = 0;
     this.crierSpeakAt = 0;
     this.crierAct = null;
+    this.emptyHint = true;
     this.nextAmbient = 0;
     this.labelRects = [];
     this.clouds = Array.from({ length: 7 }, (_, i) => ({
@@ -398,6 +400,49 @@ export class World {
     return () => this.project(ent.x + 0.5 * ent.scale, ent.y + 0.5 * ent.scale, top + 0.25);
   }
 
+  // Confetti fireworks over the world (mission passed, achievement…).
+  celebrate() {
+    const colors = ["#f2c14e", "#5ee6e0", "#e5534b", "#6ad04a", "#b48cf2", "#ffffff"];
+    for (let i = 0; i < 4; i += 1) {
+      setTimeout(() => {
+        const x = this.width * (0.2 + 0.6 * Math.random());
+        const y = this.height * (0.2 + 0.3 * Math.random());
+        this.particles.burst(() => [x, y], { count: 36, colors, speed: 160, up: 60, gravity: 220, size: 5, life: 1400, glow: true });
+      }, i * 220);
+    }
+    this.flashScreen("rgba(255,240,180,0.25)", 300);
+  }
+
+  // Point at the things named in an error (objects, classes, variables,
+  // collections). Returns how many were found on the map.
+  spotlight(names, dur = 6000) {
+    const wanted = new Set(names);
+    const spots = [];
+    for (const ent of this.entities.values()) {
+      const short = ent.cls.split(".").pop();
+      const hit = ent.names.find((n) => wanted.has(n.split(".").pop())) || (wanted.has(short) ? short : null);
+      if (hit) spots.push({ at: this.entityTop(ent.oid), base: this.entityBase(ent.oid), label: hit });
+    }
+    for (const bp of this.blueprints.values()) {
+      const short = bp.qual.split(".").pop();
+      if (wanted.has(short)) spots.push({ at: this.blueprintTop(bp.qual), base: () => this.project(bp.x + 1, bp.y + 1, 0), label: `class ${short}` });
+    }
+    for (const sign of this.signs.values()) {
+      if (wanted.has(sign.name)) spots.push({ at: () => this.project(sign.x + 0.5, sign.y + 0.5, 1.6), base: () => this.project(sign.x + 0.5, sign.y + 0.5, 0), label: sign.name });
+    }
+    for (const col of this.collections.values()) {
+      if (wanted.has(col.name)) {
+        const [x, y] = this.colPos(col, 0);
+        spots.push({ at: () => this.project(x + 0.5, y + 0.5, 1.6), base: () => this.project(x + 0.5, y + 0.5, 0), label: col.name });
+      }
+    }
+    this.effects = this.effects.filter((f) => f.kind !== "spot");
+    for (const spot of spots.slice(0, 6)) {
+      this.addEffect({ kind: "spot", at: spot.at, base: spot.base, label: spot.label, dur });
+    }
+    return spots.length;
+  }
+
   blueprintTop(qual) {
     const bp = this.blueprints.get(qual);
     if (!bp) return null;
@@ -484,6 +529,8 @@ export class World {
   animateEvents(events, state) {
     const names = TraceModel.names(state);
     for (const ev of events) {
+      const noise = EVENT_SOUNDS[ev.type];
+      if (noise) sound.play(ev.type === "return" && !ev.rejected ? null : ev.type === "print" && ev.oid ? "blip" : noise);
       switch (ev.type) {
         case "class_def": {
           this.pulseBlueprint(ev.cls, "#5ee6e0");
@@ -1378,7 +1425,7 @@ export class World {
       c.fillStyle = "#e24c4c";
       c.fill();
     }
-    if (!this.blueprints.size && !this.entities.size && !this.signs.size && !this.collections.size) {
+    if (this.emptyHint && !this.blueprints.size && !this.entities.size && !this.signs.size && !this.collections.size) {
       c.font = "600 13px system-ui";
       c.fillStyle = "rgba(255,255,255,0.75)";
       c.textAlign = "center";
@@ -1500,6 +1547,32 @@ export class World {
         c.fillStyle = g;
         c.fillRect(x - w / 2, y - h, w, h);
         c.globalAlpha = 1;
+      } else if (f.kind === "spot") {
+        const [bx, by] = f.base();
+        const [x, y] = f.at();
+        const pulse = 1 + 0.15 * Math.sin(now / 160);
+        c.save();
+        c.globalAlpha = t > 0.85 ? (1 - t) / 0.15 : 1;
+        c.strokeStyle = "#ff5a4f";
+        c.lineWidth = 3;
+        c.shadowColor = "#ff5a4f";
+        c.shadowBlur = 14;
+        c.setLineDash([8, 6]);
+        c.lineDashOffset = -now / 30;
+        c.beginPath();
+        c.ellipse(bx, by, 32 * k * pulse, 16 * k * pulse, 0, 0, Math.PI * 2);
+        c.stroke();
+        c.setLineDash([]);
+        const bob = Math.sin(now / 200) * 5;
+        c.fillStyle = "#ff5a4f";
+        c.beginPath();
+        c.moveTo(x, y - 6 + bob);
+        c.lineTo(x - 9, y - 20 + bob);
+        c.lineTo(x + 9, y - 20 + bob);
+        c.closePath();
+        c.fill();
+        c.restore();
+        this.tag(x, y - 24 + bob, `regarde ici : ${f.label}`, "#fff", 10, "rgba(140,20,20,0.92)", { icon: "🔎", collide: false, border: "#ffb4ad" });
       } else if (f.kind === "ring") {
         const [x, y] = f.at();
         c.globalAlpha = 1 - t;
@@ -1708,6 +1781,12 @@ export class World {
     }
   }
 }
+
+// Sound played for each kind of trace event (see sound.js).
+const EVENT_SOUNDS = {
+  class_def: "build", spawn: "spawn", print: "bell", call: "blip", func_call: "blip", input: "ask",
+  raise: "zap", error: "boom", caught: "pop", yield: "twinkle", return: "shield",
+};
 
 function hashColorOf(text) {
   let h = 0;
