@@ -124,12 +124,19 @@ class PyCraftHandler(BaseHTTPRequestHandler):
         entry = str(data.get("entry", "main.py"))
         if entry not in files:
             raise ValueError("Fichier d'entrée introuvable.")
-        return pedagogy.run_code(files, entry)
+        return pedagogy.run_code(files, entry,
+                                 pedagogy.clean_lines(data.get("stdin")),
+                                 pedagogy.clean_lines(data.get("argv")))
 
     def api_check(self, data: dict[str, Any]) -> dict[str, Any]:
         level_id = self.level_id(data)
         files = pedagogy.clean_files(data.get("files"))
-        return pedagogy.check_mission(self.store, level_id, files)
+        stdin = data.get("stdin")
+        argv = data.get("argv")
+        return pedagogy.check_mission(
+            self.store, level_id, files,
+            None if stdin is None else pedagogy.clean_lines(stdin),
+            None if argv is None else pedagogy.clean_lines(argv))
 
     def api_hint(self, data: dict[str, Any]) -> dict[str, Any]:
         if data.get("peek"):

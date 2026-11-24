@@ -281,15 +281,15 @@ def run_rule(rule: str, args: dict[str, Any],
     if rule == "naming":
         problems = naming_problems(tree)
         if problems:
-            name, line, style = problems[0]
-            return False, f"`{name}` devrait être en {style}.", line
+            name, bad_line, style = problems[0]
+            return False, f"`{name}` devrait être en {style}.", bad_line
         return True, "", None
     if rule == "no_external_protected":
         found = external_protected_access(tree)
         if found:
-            expr, line = found[0]
+            expr, expr_line = found[0]
             return False, f"`{expr}` touche un attribut protégé depuis " \
-                "l'extérieur de la classe.", line
+                "l'extérieur de la classe.", expr_line
         return True, "", None
     if rule == "no_name_mangling":
         bad = [n for n in ast.walk(tree) if isinstance(n, ast.Attribute)
@@ -350,7 +350,96 @@ def run_rule(rule: str, args: dict[str, Any],
         return not dup, f"`{args['cls']}.{method}` réaffecte " \
             f"`self.{dup[0] if dup else ''}` alors que le parent le fait " \
             "déjà : c'est de la duplication.", cfunc.lineno
+    if rule == "only_functions":
+        extra = [n.lineno for n in tree.body if not isinstance(
+            n, (ast.FunctionDef, ast.Import, ast.ImportFrom))
+            and not (isinstance(n, ast.Expr)
+                     and isinstance(n.value, ast.Constant))]
+        return not extra, f"{filename} ne doit contenir que des fonctions " \
+            f"(ligne {extra[0] if extra else '?'} : du code hors fonction).", \
+            extra[0] if extra else None
+    if rule in ("is_recursive", "no_loop_in", "uses_loop_in"):
+        funcs = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)
+                 and n.name == args["name"]]
+        if not funcs:
+            return False, f"La fonction `{args['name']}` est introuvable.", \
+                None
+        func = funcs[0]
+        if rule == "is_recursive":
+            calls = [n for n in ast.walk(func) if isinstance(n, ast.Call)
+                     and isinstance(n.func, ast.Name)
+                     and n.func.id in _local_names(func)]
+            return bool(calls), f"`{args['name']}` doit être récursive : " \
+                "elle (ou sa fonction auxiliaire) doit s'appeler elle-même.", \
+                func.lineno
+        loops = [n for n in ast.walk(func)
+                 if isinstance(n, (ast.For, ast.While, ast.comprehension))]
+        if rule == "no_loop_in":
+            return not loops, f"`{args['name']}` ne doit pas utiliser de " \
+                "boucle : la répétition doit venir de la récursion.", \
+                loops[0].lineno if loops and hasattr(loops[0], "lineno") \
+                else func.lineno
+        return bool(loops), f"`{args['name']}` doit utiliser une boucle.", \
+            func.lineno
+    if rule in ("has_node", "lacks_node", "except_tuple", "has_finally", "no_for_stmt",
+                "no_call", "count_handlers"):
+        scope: ast.AST = tree
+        where = filename
+        if args.get("name"):
+            matches = [n for n in ast.walk(tree)
+                       if isinstance(n, (ast.FunctionDef, ast.ClassDef))
+                       and n.name == args["name"]]
+            if not matches:
+                return False, f"`{args['name']}` est introuvable.", None
+            scope = matches[0]
+            where = f"`{args['name']}`"
+        line = getattr(scope, "lineno", None)
+        nodes = list(ast.walk(scope))
+        if rule == "has_node":
+            kinds = args["node"].split("|")
+            ok = any(type(n).__name__ in kinds for n in nodes)
+            return ok, args.get("message", f"{where} doit utiliser "
+                                f"{args['node']}."), line
+        if rule == "lacks_node":
+            kinds = args["node"].split("|")
+            hits = [n for n in nodes if type(n).__name__ in kinds]
+            return not hits, args.get("message", f"{where} ne doit pas "
+                                      f"utiliser {args['node']}."), \
+                getattr(hits[0], "lineno", line) if hits else line
+        if rule == "except_tuple":
+            ok = any(isinstance(n, ast.ExceptHandler)
+                     and isinstance(n.type, ast.Tuple) for n in nodes)
+            return ok, f"{where} doit attraper plusieurs types d'erreurs " \
+                "dans un seul `except (TypeA, TypeB)`.", line
+        if rule == "count_handlers":
+            count = sum(isinstance(n, ast.ExceptHandler) for n in nodes)
+            return count >= args["min"], f"{where} doit avoir au moins " \
+                f"{args['min']} blocs except (il en a {count}).", line
+        if rule == "has_finally":
+            ok = any(isinstance(n, ast.Try) and n.finalbody for n in nodes)
+            return ok, f"{where} doit utiliser un bloc `finally`.", line
+        if rule == "no_for_stmt":
+            loops_found = [n for n in nodes
+                           if isinstance(n, (ast.For, ast.While))]
+            return not loops_found, f"{where} doit utiliser une " \
+                "compréhension, pas une boucle for/while classique.", \
+                loops_found[0].lineno if loops_found else line
+        bad_calls = [n for n in nodes if isinstance(n, ast.Call)
+                     and isinstance(n.func, ast.Name)
+                     and n.func.id == args["call"]]
+        return not bad_calls, args.get(
+            "message", f"`{args['call']}()` n'est pas autorisé ici."), \
+            bad_calls[0].lineno if bad_calls else None
     raise ValueError(f"Règle statique inconnue : {rule}")
+
+
+def _local_names(func: ast.FunctionDef) -> set[str]:
+    """The function's own name and the names of its nested helpers."""
+    names = {func.name}
+    for node in ast.walk(func):
+        if isinstance(node, ast.FunctionDef):
+            names.add(node.name)
+    return names
 
 
 def _self_assigned(func: ast.FunctionDef) -> set[str]:

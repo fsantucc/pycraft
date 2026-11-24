@@ -229,13 +229,14 @@ export class LessonPanel {
     const kindLabel = { predict: "Prédiction", choice: "Choix", explain: "Explique avec tes mots" }[q.kind];
     box.append(el("div", { class: "small muted" }, `Question ${index + 1} · ${kindLabel}`), el("div", { html: md(q.prompt) }));
     if (q.code) box.append(el("pre", {}, q.code));
+    if (q.stdin && q.stdin.length) box.append(el("div", { class: "stdin-note" }, `L'utilisateur tape : ${q.stdin.join(" ⏎ ")} ⏎`));
     const feedback = el("div", { class: "feedback" });
     if (q.kind === "predict") {
       const area = el("textarea", { placeholder: "Écris exactement ce que le programme affiche…" });
       area.value = local.answer || "";
       box.append(area);
       box.append(el("div", { class: "next-row" },
-        el("button", { class: "tiny", onclick: () => this.app.visualizeSnippet(q.code) }, saved.correct || local.wrong ? "👁 Voir l'exécution" : "👁 Voir l'exécution (après ta réponse)"),
+        el("button", { class: "tiny", onclick: () => this.app.visualizeSnippet(q.code, q.stdin || []) }, saved.correct || local.wrong ? "👁 Voir l'exécution" : "👁 Voir l'exécution (après ta réponse)"),
         el("button", { class: "mc-btn primary", disabled: saved.correct, onclick: () => this.answer(index, area.value) }, saved.correct ? "Validé" : "Valider")));
     } else if (q.kind === "choice") {
       const opts = el("div", { class: "opts" });

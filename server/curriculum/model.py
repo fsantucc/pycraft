@@ -34,6 +34,7 @@ class Question:
     options: list[str] = field(default_factory=list)
     answer: int = -1
     explanation: str = ""
+    stdin: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -59,6 +60,11 @@ class Level:
     bonus: str = ""
     going_further: str = ""
     starter_from: str = ""
+    stdin: list[str] = field(default_factory=list)
+    argv: list[str] = field(default_factory=list)
+    readonly: list[str] = field(default_factory=list)
+    demo_stdin: list[str] = field(default_factory=list)
+    demo_argv: list[str] = field(default_factory=list)
 
     def public(self) -> dict[str, Any]:
         """What the browser may see: no check code, no answers."""
@@ -69,7 +75,7 @@ class Level:
         del data["hints"]
         data["quiz"] = [
             {"kind": q.kind, "prompt": q.prompt, "code": q.code,
-             "options": q.options}
+             "options": q.options, "stdin": q.stdin}
             for q in self.quiz
         ]
         return data
@@ -83,11 +89,14 @@ class Region:
     theme: str
     reward: str
     levels: list[Level]
+    act: int = 2
+    icon: str = "★"
 
     def public(self) -> dict[str, Any]:
         return {
             "id": self.id, "name": self.name, "subtitle": self.subtitle,
-            "theme": self.theme, "reward": self.reward,
+            "theme": self.theme, "reward": self.reward, "act": self.act,
+            "icon": self.icon,
             "levels": [lvl.public() for lvl in self.levels],
         }
 
@@ -104,9 +113,10 @@ def dynamic(cid: str, label: str, code: str, locate: str = "",
                  locate=locate, hint=hint)
 
 
-def predict(prompt: str, code: str, explanation: str) -> Question:
+def predict(prompt: str, code: str, explanation: str,
+            stdin: list[str] | None = None) -> Question:
     return Question(kind="predict", prompt=prompt, code=code.strip("\n"),
-                    explanation=explanation)
+                    explanation=explanation, stdin=stdin or [])
 
 
 def choice(prompt: str, options: list[str], answer: int,

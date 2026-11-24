@@ -133,6 +133,7 @@ export class Editor {
   }
 
   setReadOnly(flag) {
+    if (this.readOnly === flag && this.area.readOnly === flag) return;
     this.readOnly = flag;
     this.area.readOnly = flag;
   }

@@ -27,11 +27,12 @@ from typing import Any, Callable
 ALLOWED_MODULES = (
     "math", "random", "typing", "dataclasses", "enum", "abc",
     "collections", "itertools", "functools", "string", "statistics",
-    "copy", "datetime", "time", "re", "json", "__future__",
+    "copy", "datetime", "time", "re", "json", "__future__", "sys",
 )
 for _name in ALLOWED_MODULES:
     __import__(_name)
 import collections.abc  # noqa: E402,F401  (pre-import submodule)
+import dis  # noqa: E402
 import json.decoder  # noqa: E402,F401
 import random  # noqa: E402
 
@@ -79,6 +80,10 @@ class Sandbox:
         self.tracing = False
         self.main_ns: dict[str, Any] = {}
         self.module_ns: list[dict[str, Any]] = []
+        self.inputs: list[str] = []
+        self.gen_frames: set[int] = set()
+        self.seen_exc: set[int] = set()
+        self.pending_exc: tuple[int, int, str] | None = None
 
     # ------------------------------------------------------------ helpers
     def emit(self, event: dict[str, Any]) -> None:
@@ -322,9 +327,46 @@ class Sandbox:
             return None
         if event == "line":
             self.on_line(frame)
+            self.check_caught(frame)
         elif event == "return":
             self.on_return(frame, arg)
+        elif event == "exception":
+            self.on_exception(frame, arg)
         return self.local_trace
+
+    def on_exception(self, frame: types.FrameType, arg: Any) -> None:
+        etype, value = arg[0], arg[1]
+        if etype in (StopIteration, GeneratorExit, StepLimitReached):
+            return
+        self.flush()
+        key = id(value)
+        speaker = self.current_speaker()
+        if key not in self.seen_exc:
+            self.seen_exc.add(key)
+            self.keep_alive.append(value)
+            self.emit({"type": "raise", "etype": etype.__name__,
+                       "message": str(value)[:200], "line": frame.f_lineno,
+                       "func": frame.f_code.co_name, "oid": speaker,
+                       "mro": [c.__name__ for c in etype.__mro__
+                               if c not in (object, BaseException)]})
+        elif self.pending_exc and self.pending_exc[1] != id(frame):
+            self.emit({"type": "propagate", "etype": etype.__name__,
+                       "func": frame.f_code.co_name,
+                       "line": frame.f_lineno})
+        self.pending_exc = (key, id(frame), etype.__name__)
+
+    def check_caught(self, frame: types.FrameType) -> None:
+        if self.pending_exc and self.pending_exc[1] == id(frame):
+            self.emit({"type": "caught", "etype": self.pending_exc[2],
+                       "line": frame.f_lineno,
+                       "func": frame.f_code.co_name})
+            self.pending_exc = None
+
+    def current_speaker(self) -> str | None:
+        for entry in reversed(self.stack):
+            if entry.get("oid"):
+                return str(entry["oid"])
+        return None
 
     def on_call(self, frame: types.FrameType) -> None:
         self.flush()
@@ -371,6 +413,13 @@ class Sandbox:
                     entry["recv"] = receiver_cls.__qualname__
             event["args"] = [[n, self.ser(v)] for n, v in args]
             self.emit(event)
+        elif code.co_flags & 0x20 and not code.co_name.startswith("<"):
+            first = id(frame) not in self.gen_frames
+            self.gen_frames.add(id(frame))
+            entry.update(kind="gen", method=code.co_name)
+            self.emit({"type": "gen_start" if first else "gen_resume",
+                       "name": code.co_name, "line": frame.f_lineno,
+                       "depth": len(self.stack)})
         elif code.co_name != "<module>" and not self.is_class_body(frame) \
                 and not code.co_name.startswith("<"):
             entry.update(kind="func", method=code.co_name)
@@ -389,6 +438,19 @@ class Sandbox:
                            "name": frame.f_globals.get("__name__"),
                            "file": code.co_filename})
         self.stack.append(entry)
+
+    @staticmethod
+    def is_yield(frame: types.FrameType) -> bool:
+        """True when a generator frame is suspended on a yield."""
+        code = frame.f_code.co_code
+        last = frame.f_lasti
+        try:
+            here = dis.opname[code[last]]
+            before = dis.opname[code[last - 2]] if last >= 2 else ""
+        except (IndexError, AttributeError):
+            return False
+        return here.startswith("YIELD") or (
+            here == "RESUME" and before.startswith("YIELD"))
 
     @staticmethod
     def is_class_body(frame: types.FrameType) -> bool:
@@ -427,6 +489,21 @@ class Sandbox:
         self.flush()
         entry = self.stack.pop() if self.stack else {"kind": "other"}
         kind = entry.get("kind")
+        aborted = bool(self.pending_exc and self.pending_exc[1] == id(frame))
+        if aborted and kind in ("instance", "static", "class", "getter",
+                                "setter", "func"):
+            self.emit({"type": "aborted", "name": entry.get("method"),
+                       "cls": entry.get("cls"),
+                       "etype": self.pending_exc[2] if self.pending_exc
+                       else ""})
+            caller = frame.f_back
+            while caller is not None and \
+                    caller.f_code.co_filename not in self.user_files:
+                caller = caller.f_back
+            self.last_frame = caller
+            if caller is not None and self.tracing:
+                self.on_line(caller, resume=True)
+            return
         if kind in ("instance", "static", "class", "getter", "setter"):
             event: dict[str, Any] = {
                 "type": "return", "cls": entry["cls"],
@@ -444,6 +521,12 @@ class Sandbox:
         elif kind == "func":
             self.emit({"type": "func_return", "name": entry["method"],
                        "value": self.ser(value)})
+        elif kind == "gen":
+            if self.is_yield(frame):
+                self.emit({"type": "yield", "name": entry["method"],
+                           "value": self.ser(value)})
+            else:
+                self.emit({"type": "gen_end", "name": entry["method"]})
         caller = frame.f_back
         while caller is not None and \
                 caller.f_code.co_filename not in self.user_files:
@@ -464,6 +547,26 @@ class Sandbox:
             line, self.line_buffer = self.line_buffer.split("\n", 1)
             self.emit_print(line)
         return len(text)
+
+    def read_input(self, prompt: Any = "") -> str:
+        text = str(prompt)
+        sys.stdout.write(text)
+        if not self.inputs:
+            sys.stdout.write("\n")
+            raise EOFError("input() n'a plus de valeur à lire : ajoute une "
+                           "ligne dans « Entrées du programme ».")
+        value = self.inputs.pop(0)
+        if self.tracing and isinstance(sys.stdout, OutputProxy):
+            self.line_buffer = self.line_buffer[:-len(text)] \
+                if text and self.line_buffer.endswith(text) \
+                else self.line_buffer
+            self.output.append(value + "\n")
+            self.output_len += len(value) + 1
+            self.emit({"type": "input", "prompt": text, "value": value[:200],
+                       "oid": self.current_speaker()})
+            return value
+        sys.stdout.write(value + "\n")
+        return value
 
     def emit_print(self, line: str) -> None:
         if not self.tracing:
@@ -559,9 +662,19 @@ def make_import(sandbox: Sandbox) -> Callable[..., Any]:
     return guarded_import
 
 
-def blocked_input(*_args: Any) -> str:
-    raise RuntimeError("input() n'est pas disponible dans PyCraft : "
-                       "écris les valeurs directement dans ton code.")
+def make_open(sandbox: Sandbox) -> Callable[..., Any]:
+    """A virtual open(): reads the learner's own files, nothing else."""
+    def virtual_open(file: Any, mode: str = "r", *args: Any,
+                     **kwargs: Any) -> Any:
+        name = str(file)
+        if any(flag in mode for flag in "wax+"):
+            raise PermissionError(
+                f"[Errno 13] Écriture interdite dans PyCraft: {name!r}")
+        base = name.replace("\\", "/").rsplit("/", 1)[-1]
+        if base in sandbox.files and "/" not in name:
+            return io.StringIO(sandbox.files[base])
+        raise FileNotFoundError(2, "No such file or directory", name)
+    return virtual_open
 
 
 def error_info(exc: BaseException, sandbox: Sandbox) -> dict[str, Any]:
@@ -650,6 +763,39 @@ def run_checks(checks: list[dict[str, Any]], ns: dict[str, Any],
             sys.stdout = previous
         return buffer.getvalue()
 
+    def with_input(func: Callable[..., Any], lines: list[Any],
+                   *args: Any, **kwargs: Any) -> tuple[Any, str]:
+        """Call func with simulated keyboard input; return (result, out)."""
+        saved = sandbox.inputs
+        sandbox.inputs = [str(v) for v in lines]
+        try:
+            return capture(func, *args, **kwargs)
+        finally:
+            sandbox.inputs = saved
+
+    def rerun(argv: list[Any] | None = None, inputs: list[Any] | None = None,
+              file: str = ENTRY) -> str:
+        """Run a learner file again as a script; return everything it
+        printed (plus the error name if it crashed)."""
+        saved_argv, saved_inputs = sys.argv, sandbox.inputs
+        sys.argv = [file] + [str(a) for a in (argv or [])]
+        sandbox.inputs = [str(v) for v in (inputs or [])]
+        fresh: dict[str, Any] = {"__name__": "__main__", "__file__": file,
+                                 "__builtins__": builtins}
+        buffer = io.StringIO()
+        previous = sys.stdout
+        sys.stdout = buffer
+        try:
+            exec(compile(sandbox.files[file], file, "exec"), fresh)
+        except SystemExit:
+            pass
+        except Exception as exc:
+            buffer.write(f"\n[PLANTAGE] {type(exc).__name__}: {exc}\n")
+        finally:
+            sys.stdout = previous
+            sys.argv, sandbox.inputs = saved_argv, saved_inputs
+        return buffer.getvalue()
+
     def attrs(obj: Any) -> dict[str, Any]:
         return dict(getattr(obj, "__dict__", {}))
 
@@ -667,6 +813,7 @@ def run_checks(checks: list[dict[str, Any]], ns: dict[str, Any],
         "ns": ns, "CheckFailed": CheckFailed,
         "program_output": "".join(sandbox.output),
         "reload_module": reload_module,
+        "with_input": with_input, "rerun": rerun, "files": sandbox.files,
     }
     sink = io.StringIO()
     for check in checks:
@@ -711,7 +858,10 @@ def main() -> None:
     sys.meta_path.insert(0, UserModuleFinder(sandbox))
     builtins.__build_class__ = sandbox.build_class  # type: ignore[assignment]
     builtins.__import__ = make_import(sandbox)
-    builtins.input = blocked_input  # type: ignore[assignment]
+    builtins.input = sandbox.read_input  # type: ignore[assignment]
+    builtins.open = make_open(sandbox)  # type: ignore[assignment]
+    sandbox.inputs = [str(v) for v in request.get("stdin", [])]
+    sys.argv = [ENTRY] + [str(a) for a in request.get("argv", [])]
     sys.stdout = OutputProxy(sandbox)  # type: ignore[assignment]
 
     ns: dict[str, Any] = {"__name__": "__main__", "__file__": ENTRY,
@@ -728,6 +878,8 @@ def main() -> None:
         exec(code, ns)
     except SyntaxError as exc:
         error = error_info(exc, sandbox)
+    except SystemExit:
+        pass  # sys.exit() is a normal way to stop a script
     except BaseException as exc:  # report everything, never crash
         error = error_info(exc, sandbox)
     finally:
@@ -746,6 +898,7 @@ def main() -> None:
 
     check_results: list[dict[str, Any]] = []
     if request.get("checks") and error is None:
+        sys.argv = [ENTRY] + [str(a) for a in request.get("argv", [])]
         check_results = run_checks(request["checks"], ns, sandbox)
 
     final_objects = {}

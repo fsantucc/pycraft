@@ -42,7 +42,12 @@ export function md(source) {
     .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
   while (i < lines.length) {
     const line = lines[i];
-    if (line.startsWith("```")) {
+    const heading = line.match(/^(#{1,4}) (.*)$/);
+    if (heading) {
+      const level = Math.min(4, heading[1].length + 1);
+      html += `<h${level}>${inline(heading[2])}</h${level}>`;
+      i += 1;
+    } else if (line.startsWith("```")) {
       const block = [];
       i += 1;
       while (i < lines.length && !lines[i].startsWith("```")) block.push(lines[i++]);
@@ -77,7 +82,8 @@ export function md(source) {
     } else {
       const para = [];
       while (i < lines.length && lines[i].trim() !== "" && !lines[i].startsWith("```")
-        && !/^\s*[-*] /.test(lines[i]) && !/^\d+\. /.test(lines[i]) && !lines[i].startsWith("|")) {
+        && !/^\s*[-*] /.test(lines[i]) && !/^\d+\. /.test(lines[i]) && !lines[i].startsWith("|")
+        && !/^#{1,4} /.test(lines[i])) {
         para.push(lines[i++]);
       }
       html += `<p>${inline(para.join(" "))}</p>`;

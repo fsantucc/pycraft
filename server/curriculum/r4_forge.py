@@ -500,4 +500,5 @@ REGION = Region(
     subtitle="Héritage, super() et redéfinition", theme="forge",
     reward="Enclume ancestrale — débloque le Laboratoire des Ingénieurs",
     levels=[L1, L2, L3, L4],
+    act=2, icon="⚒",
 )

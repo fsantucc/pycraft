@@ -12,7 +12,7 @@ from server.progress import ProgressStore
 SOLUTIONS = Path(__file__).parent / "solutions"
 # Levels 2.1-2.3 teach attributes added after creation (like the PDF's
 # ex1/ex2): mypy rightly complains there, which motivates __init__ in 2.4.
-MYPY_EXEMPT = {"r2l1", "r2l2", "r2l3"}
+MYPY_EXEMPT = {"r2l1", "r2l2", "r2l3", "x1l3"}
 
 
 def solution(level_id: str) -> dict[str, str]:
@@ -27,8 +27,8 @@ def store(tmp_path: Path) -> ProgressStore:
 
 
 def test_order_and_ids() -> None:
-    assert len(ORDER) == 23
-    assert len(REGIONS) == 7
+    assert len(ORDER) == 43
+    assert len(REGIONS) == 13
     for level in LEVELS.values():
         for notion in level.notions:
             assert notion in NOTIONS, (level.id, notion)
@@ -73,8 +73,10 @@ def test_quiz_questions(level_id: str) -> None:
     for question in LEVELS[level_id].quiz:
         assert question.prompt
         if question.kind == "predict":
-            run = sandbox.execute({"main.py": question.code}, trace=False)
-            assert run["ok"], (level_id, run["error"])
+            run = sandbox.execute({"main.py": question.code}, trace=False,
+                                  stdin=question.stdin)
+            assert run["ok"] or question.explanation.startswith("!"), \
+                (level_id, run["error"])
             assert run["output"].strip()
         elif question.kind == "choice":
             assert 0 <= question.answer < len(question.options)
@@ -82,8 +84,9 @@ def test_quiz_questions(level_id: str) -> None:
 
 @pytest.mark.parametrize("level_id", ORDER)
 def test_demo_runs(level_id: str) -> None:
-    demo = LEVELS[level_id].demo
-    result = pedagogy.run_code(demo)
+    level = LEVELS[level_id]
+    result = pedagogy.run_code(level.demo, stdin=level.demo_stdin,
+                               argv=level.demo_argv)
     assert result["ok"], (level_id, result["error"])
 
 
@@ -109,8 +112,12 @@ def test_full_progression(store: ProgressStore) -> None:
         for index, question in enumerate(LEVELS[level_id].quiz):
             if question.kind == "predict":
                 run = sandbox.execute({"main.py": question.code},
-                                      trace=False)
+                                      trace=False, stdin=question.stdin)
                 answer: object = run["output"]
+                if run.get("error"):
+                    err = run["error"]
+                    answer = pedagogy.normalize_output(run["output"]) + \
+                        f"\n{err['type']}: {err['message']}"
             elif question.kind == "choice":
                 answer = question.answer
             else:
@@ -119,5 +126,5 @@ def test_full_progression(store: ProgressStore) -> None:
             assert graded["correct"], (level_id, index)
         assert store.status(level_id) == "mastered"
     summary = store.summary()
-    assert len(summary["rewards"]) == 7
+    assert len(summary["rewards"]) == 13
     assert summary["xp"] > 4000

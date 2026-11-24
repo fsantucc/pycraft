@@ -1,14 +1,21 @@
-# ⛏ PyCraft — apprendre Python (POO) en construisant un monde
+# ⛏ PyCraft — apprendre Python en construisant un monde
 
-PyCraft transforme le programme pédagogique de *Code Cultivation* (structure d'un
-programme, classes, encapsulation, héritage, méthodes statiques/de classe, classes
-imbriquées, qualité du code) en une aventure en 7 régions et 23 niveaux.
-**Aucun exercice du PDF n'est repris** : seules les notions le sont.
+PyCraft transforme les programmes de quatre sujets Python de l'École 42 en une seule aventure :
+
+| Acte | Sujet | Notions |
+|---|---|---|
+| I — Les Fondations | python00 *Growing Code* | fonctions, `input`, calculs, conditions, boucles, récursion, annotations |
+| II — L'Ère des Créateurs | python01 *Code Cultivation* | programmation orientée objet |
+| III — Les Terres Instables | python02 *Garden Guardian* | exceptions, `raise`, `finally`, erreurs personnalisées |
+| IV — Le Royaume des Données | python03 *Data Quest* | `sys.argv`, listes, tuples, sets, dicts, générateurs, compréhensions |
+
+13 régions, 43 niveaux, une grande finale qui mélange les quatre actes. **Aucun exercice des
+sujets n'est repris** : seules les notions le sont.
 
 Le principe : **le code que tu écris pilote réellement le monde**. Ton programme est
-exécuté dans un bac à sable qui enregistre tout ce qui se passe (classes créées,
-objets construits, attributs modifiés, méthodes appelées, `super()`, méthodes
-statiques et de classe, `print`, erreurs). Le monde rejoue ensuite cette exécution
+exécuté dans un bac à sable qui enregistre tout ce qui se passe (appels de fonctions, saisies,
+classes, objets, attributs, méthodes, `super()`, exceptions levées et attrapées, `yield`,
+contenu des listes et dictionnaires, `print`, erreurs). Le monde rejoue ensuite cette exécution
 instruction par instruction.
 
 | Dans ton code | Dans le monde |
@@ -24,6 +31,11 @@ instruction par instruction.
 | `@staticmethod` | le plan travaille seul (⚙ « sans objet ») |
 | `@classmethod` + `cls()` | rayon bleu du plan vers l'objet créé |
 | classe imbriquée | petit plan dans le grand, composant en satellite de son propriétaire |
+| appel de fonction, récursion | un bloc s'empile sur la tour « pile d'appels » |
+| `input("Âge ? ")` | le crieur pose la question, la réponse arrive entre guillemets (un `str`) |
+| liste / tuple / set / dict | étagère avec index / tablette de pierre / sac sans ordre / armoire à tiroirs étiquetés |
+| `raise` / `except` | éclair là où l'exception part, filet vert là où elle est attrapée |
+| `yield` | le générateur se met en pause dans la pile et fait jaillir sa valeur |
 
 ---
 
@@ -57,7 +69,10 @@ plus les vrais **flake8** et **mypy** quand ils sont installés.
 
 - **Gauche** : l'éditeur Python (coloration, numéros de ligne, auto-indentation,
   autocomplétion, plusieurs fichiers, Ctrl+Entrée pour exécuter, Ctrl+/ pour commenter,
-  bouton Réinitialiser, sauvegarde automatique).
+  bouton Réinitialiser, sauvegarde automatique). Dans l'Acte I, le fichier `main.py` est
+  **verrouillé** 🔒 : c'est le testeur qui importe et appelle ta fonction.
+  Sous l'éditeur, **⌨ Entrées du programme** : ce que l'utilisateur tape au clavier
+  (une réponse par ligne, pour `input()`) et les arguments de la ligne de commande (`sys.argv`).
 - **Centre** : le monde, avec la barre de lecture : ⏮ ◀ ▶/⏸ ▶| ⏭, curseur, vitesse.
   **F10** avance d'une instruction, **Maj+F10** recule. La ligne exécutée est surlignée
   dans l'éditeur, la console n'affiche que ce qui a déjà été imprimé, et le journal
@@ -86,24 +101,16 @@ premier coup ; sinon il est « à revoir », et le **défi de maîtrise** permet
 le quiz.
 
 **Progression** : XP, niveau de joueur, récompense à chaque région terminée, carte du
-monde, tableau de bord des 78 notions (découvertes / à revoir / maîtrisées), historique
+monde, tableau de bord des 129 notions (découvertes / à revoir / maîtrisées), historique
 des missions. Sauvegarde automatique dans `saves/progress.json`.
 
 ## Contenu
 
-Voir **`docs/ANALYSE_ET_PROGRAMME.md`** : analyse page par page du PDF, inventaire des
+Voir **`docs/ANALYSE_ET_PROGRAMME.md`** : analyse des quatre sujets, inventaire des
 notions (dont celles ajoutées à ta liste et les extensions facultatives signalées),
 matrice notion → niveau, et mécaniques de visualisation.
 
-| Région | Niveaux |
-|---|---|
-| 1 Le Village des Bâtisseurs | variables et exécution · point d'entrée, `__main__`, imports (2 fichiers) · **boss** shebang, conventions, type hints, flake8/mypy |
-| 2 L'Atelier des Créateurs | classe / instance · méthodes et `self` · état et simulation · `__init__` et listes · **boss** inventaire |
-| 3 La Citadelle des Gardiens | `_` et getters · setters, validation, défauts, `_` vs `__` · **boss** coffre-fort |
-| 4 La Forge des Lignées | héritage · `super().__init__` · redéfinition sur 3 niveaux · **boss** hiérarchie complète |
-| 5 Le Laboratoire des Ingénieurs | `@staticmethod` · `@classmethod` et `cls()` · **boss** choisir le bon genre de méthode |
-| 6 La Tour des Architectes | classe imbriquée de statistiques · stat de sous-classe · fonction indépendante et polymorphisme · **boss** arène d'interactions |
-| 7 Le Royaume Automatisé | épreuve finale qui mélange tout + questions de soutenance |
+Le détail des 13 régions et la matrice notion → niveau sont dans le document d'analyse.
 
 ## Architecture
 
@@ -137,9 +144,11 @@ environnement vide, et :
 - arrêt de la visualisation au-delà de 4 000 étapes (boucles infinies) ;
 - crochet d'audit qui refuse ouverture de fichiers, réseau, sous-processus,
   suppression, `ctypes`… ;
-- liste blanche d'imports (math, random, typing, dataclasses, enum, abc, collections…)
-  plus les fichiers de l'apprenant ;
-- `input()` désactivé.
+- liste blanche d'imports (math, random, sys, typing, dataclasses, enum, abc,
+  collections…) plus les fichiers de l'apprenant ;
+- `input()` lit les « Entrées du programme » que tu prépares ;
+- `open()` est virtuel : il lit tes propres fichiers, tout autre nom lève
+  `FileNotFoundError`, et l'écriture est refusée.
 
 Limite honnête : ce n'est pas un conteneur. C'est adapté à un usage local par
 l'apprenant lui-même, pas à l'exécution de code inconnu sur un serveur public. Sous
@@ -149,20 +158,20 @@ d'audit et la liste blanche s'appliquent.
 ## Tests
 
 ```
-python3 -m pytest -q tests        # 126 tests
+python3 -m pytest -q tests        # 236 tests
 python3 -m mypy server run.py     # aucune erreur
 ```
 
 Les tests vérifient notamment que **chaque mission est réalisable** (solution de
 référence acceptée), que **chaque code de départ est refusé**, que chaque démo et
 chaque question de prédiction s'exécutent, que les réponses ne sont jamais envoyées
-au navigateur, et qu'une partie complète (23 niveaux, quiz compris) se joue de bout
+au navigateur, et qu'une partie complète (43 niveaux, quiz compris) se joue de bout
 en bout. Les solutions de `tests/solutions/` sont des **spoilers** : ne les ouvre pas
 si tu joues.
 
 ## Ce qui est fait, et ses limites
 
-Fonctionnel et testé : les 23 niveaux, le bac à sable, le traceur, le monde voxel,
+Fonctionnel et testé : les 43 niveaux, le bac à sable, le traceur, le monde voxel,
 la lecture pas à pas (avant/arrière), l'éditeur multi-fichiers, l'inspecteur, les
 diagrammes, les vérifications, les indices, les quiz, la progression et la sauvegarde.
 

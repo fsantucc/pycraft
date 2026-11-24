@@ -566,4 +566,5 @@ REGION = Region(
     subtitle="Classes imbriquées, statistiques, relations et polymorphisme",
     theme="tour", reward="Œil de l'End — débloque le Royaume Automatisé",
     levels=[L1, L2, L3, L4],
+    act=2, icon="👁",
 )

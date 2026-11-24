@@ -26,6 +26,7 @@ class App {
     this.saveTimer = null;
     this.playTimer = null;
     this.entry = "main.py";
+    this.io = { demo: null, mission: null };
 
     this.editor = new Editor($("editor"), {
       onChange: (files) => this.onEdit(files),
@@ -78,8 +79,32 @@ class App {
     const span = Math.max(1, p.level_next - p.level_floor);
     $("xp-fill").style.width = `${Math.min(100, 100 * (p.xp - p.level_floor) / span)}%`;
     $("xp-text").textContent = `${p.xp} XP`;
-    const icons = ["⛏", "🛠", "🛡", "⚒", "🔴", "👁", "👑"];
-    $("rewards").innerHTML = p.rewards.map((r, i) => `<span title="${esc(r)}">${icons[i] || "★"}</span>`).join("");
+    const iconOf = {};
+    (this.curriculum ? this.curriculum.regions : []).forEach((r) => { iconOf[r.reward] = r.icon; });
+    $("rewards").innerHTML = p.rewards.map((r) => `<span title="${esc(r)}">${iconOf[r] || "★"}</span>`).join("");
+  }
+
+  readIO() {
+    const stdin = $("io-stdin").value.replace(/\r/g, "").split("\n");
+    while (stdin.length && stdin[stdin.length - 1] === "") stdin.pop();
+    return { stdin, argv: splitArgs($("io-argv").value) };
+  }
+
+  writeIO(io) {
+    $("io-stdin").value = (io.stdin || []).join("\n");
+    $("io-argv").value = (io.argv || []).map((a) => (/\s/.test(a) || a === "" ? `"${a}"` : a)).join(" ");
+    const used = (io.stdin && io.stdin.length) || (io.argv && io.argv.length)
+      || /input\(|sys\.argv/.test(Object.values(this.editor.files).join("\n"));
+    $("io-panel").open = !!used;
+    this.updateIOSummary();
+  }
+
+  updateIOSummary() {
+    const io = this.readIO();
+    const parts = [];
+    if (io.stdin.length) parts.push(`${io.stdin.length} réponse(s)`);
+    if (io.argv.length) parts.push(`${io.argv.length} argument(s)`);
+    $("io-summary").textContent = parts.length ? `(${parts.join(", ")})` : "(aucune)";
   }
 
   bindUi() {
@@ -102,6 +127,12 @@ class App {
     $("cam-out").addEventListener("click", () => { this.world.zoom = Math.max(0.5, this.world.zoom / 1.15); });
     $("cam-home").addEventListener("click", () => { this.world.zoom = 1; this.world.pan = { x: 0, y: 0 }; this.world.rot = 0; });
     $("dg-objects").addEventListener("change", () => this.renderSide());
+    for (const id of ["io-stdin", "io-argv"]) {
+      $(id).addEventListener("input", () => {
+        if (this.mode === "demo" || this.mode === "mission") this.io[this.mode] = this.readIO();
+        this.updateIOSummary();
+      });
+    }
     document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
       document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
       document.querySelectorAll(".tab-body").forEach((b) => b.classList.toggle("active", b.id === `tab-${tab.dataset.tab}`));
@@ -131,6 +162,7 @@ class App {
     }
     await this.flushSave();
     $("overlay").classList.add("hidden");
+    this.pause();
     this.mode = null;
     this.model = null;
     this.level = this.levelsById[levelId];
@@ -143,6 +175,13 @@ class App {
     const saved = await api(`/api/code?level=${levelId}`);
     this.buffers.demo = Object.keys(saved.sandbox || {}).length ? saved.sandbox : { ...this.level.demo };
     this.buffers.mission = Object.keys(saved.code || {}).length ? saved.code : this.starterFiles();
+    for (const name of this.level.readonly || []) {
+      if (this.level.starter[name] !== undefined) this.buffers.mission[name] = this.level.starter[name];
+    }
+    this.io = {
+      demo: { stdin: [...(this.level.demo_stdin || [])], argv: [...(this.level.demo_argv || [])] },
+      mission: { stdin: [...(this.level.stdin || [])], argv: [...(this.level.argv || [])] },
+    };
     await this.lesson.loadHints();
     const st = this.progress.levels[levelId];
     let step = "story";
@@ -191,9 +230,11 @@ class App {
     if (this.mode && this.mode !== "snippet" && this.buffers[this.mode]) this.buffers[this.mode] = this.editor.getFiles();
     this.mode = mode;
     const files = this.buffers[mode] || { "main.py": "" };
-    this.editor.setFiles(files, "main.py");
+    const names = Object.keys(files);
+    const first = mode === "mission" ? names.find((n) => !(this.level.readonly || []).includes(n)) || "main.py" : "main.py";
+    this.editor.setFiles(files, files[first] !== undefined ? first : names[0]);
     this.editor.setMarkers({});
-    this.editor.setReadOnly(false);
+    if (this.io[mode]) this.writeIO(this.io[mode]);
     const label = mode === "mission" ? `Mission : ${this.level.mission_title}` : mode === "demo" ? "Démonstration / essais" : "Extrait du quiz (non sauvegardé)";
     $("editor-label").textContent = label;
     this.renderFileTabs();
@@ -203,12 +244,16 @@ class App {
     const tabs = $("file-tabs");
     tabs.innerHTML = "";
     const names = Object.keys(this.editor.files);
+    const locked = this.mode === "mission" ? this.level.readonly || [] : [];
     names.forEach((name) => tabs.append(el("div", {
       class: `file-tab ${name === this.editor.active ? "active" : ""}`,
+      title: locked.includes(name) ? "Fichier verrouillé : c'est le testeur, il appelle ta fonction" : "",
       onclick: () => this.editor.switchTo(name),
-    }, name)));
+    }, name, locked.includes(name) ? el("span", { class: "lock-ic" }, "🔒") : null)));
+    this.editor.setReadOnly(locked.includes(this.editor.active));
     if (names.length > 1) {
-      $("btn-run").textContent = this.editor.active === "main.py" ? "▶ Exécuter main.py" : `▶ Exécuter ${this.editor.active}`;
+      const viaHelper = (this.level.readonly || []).includes("main.py");
+      $("btn-run").textContent = viaHelper || this.editor.active === "main.py" ? "▶ Exécuter main.py" : `▶ Exécuter ${this.editor.active}`;
     } else {
       $("btn-run").textContent = "▶ Exécuter";
     }
@@ -282,7 +327,8 @@ class App {
       return;
     }
     const files = this.editor.getFiles();
-    this.execute(files, this.editor.active, true);
+    const helper = this.mode !== "snippet" && (this.level.readonly || []).includes("main.py") && files["main.py"] ? "main.py" : null;
+    this.execute(files, helper || this.editor.active, true);
   }
 
   clearRun() {
@@ -300,7 +346,8 @@ class App {
     this.pause();
     $("btn-run").disabled = true;
     try {
-      const result = await api("/api/run", { files, entry });
+      const io = this.mode === "snippet" ? (this.snippetIO || { stdin: [], argv: [] }) : this.readIO();
+      const result = await api("/api/run", { files, entry, stdin: io.stdin, argv: io.argv });
       this.loadResult(result, files, autoplay);
     } catch (err) {
       toast(err.message, "bad");
@@ -360,7 +407,7 @@ class App {
     this.playing = true;
     $("tl-play").textContent = "⏸ Pause";
     const tick = () => {
-      if (!this.playing) return;
+      if (!this.playing || !this.model) return;
       if (this.index >= this.model.count - 1) {
         this.pause();
         return;
@@ -388,9 +435,13 @@ class App {
     this.index = target;
     const state = this.model.stateAt(target);
     this.state = state;
-    this.world.setScene(state, this.model.classes);
+    const stepNow = this.model.steps[target];
+    this.world.setScene(state, this.model.classes, stepNow ? stepNow.locals : [], stepNow ? stepNow.func : "");
     if (animate && forward) this.world.animateEvents(this.model.eventsAt(target), state);
     const step = this.model.steps[target];
+    if (step && step.file !== this.editor.active && this.editor.files[step.file] !== undefined) {
+      this.editor.switchTo(step.file);
+    }
     this.editor.setCurrent(step ? { file: step.file, line: step.line } : null);
     $("tl-range").value = Math.max(0, target);
     $("tl-info").textContent = this.model.count
@@ -470,9 +521,11 @@ class App {
     tip.classList.remove("hidden");
   }
 
-  async visualizeSnippet(code) {
+  async visualizeSnippet(code, stdin = []) {
     if (this.mode !== "snippet") this.buffers[this.mode] = this.editor.getFiles();
     this.mode = "snippet";
+    this.snippetIO = { stdin, argv: [] };
+    this.writeIO(this.snippetIO);
     this.editor.setFiles({ "main.py": code }, "main.py");
     $("editor-label").textContent = "Extrait du quiz (non sauvegardé) — ";
     $("editor-label").append(el("button", { class: "tiny", onclick: () => this.goStep(this.step) }, "revenir à ma mission"));
@@ -488,7 +541,8 @@ class App {
     $("btn-check").disabled = true;
     const files = this.editor.getFiles();
     try {
-      const res = await api("/api/check", { level: this.level.id, files });
+      const io = this.readIO();
+      const res = await api("/api/check", { level: this.level.id, files, stdin: io.stdin, argv: io.argv });
       this.lesson.lastCheck = res;
       this.progress = res.progress;
       this.updateTopbar();
@@ -548,7 +602,7 @@ class App {
   }
 
   showWelcome() {
-    this.overlay(el("div", { class: "md", html: md(`## Bienvenue dans PyCraft
+    this.overlay(el("div", { class: "md", html: '<img src="/img/logo.svg" alt="PyCraft" width="420">' + md(`## Bienvenue dans PyCraft
 
 Ici, **chaque ligne de Python que tu écris agit sur un monde**. Les classes apparaissent comme des plans holographiques, les objets comme des créatures, les attributs comme leurs caractéristiques, les méthodes comme leurs actions.
 
@@ -564,9 +618,18 @@ Ta progression est sauvegardée automatiquement.`) }));
   showMap() {
     const wrap = el("div");
     wrap.append(el("h2", {}, "Carte du monde"));
-    const grid = el("div", { class: "map-regions" });
+    let grid = null;
+    let act = null;
     const icon = { mastered: "🏆", completed: "✔", in_progress: "⛏", available: "▶", locked: "🔒" };
     for (const region of this.curriculum.regions) {
+      if (region.act !== act) {
+        act = region.act;
+        const info = this.curriculum.acts[act] || {};
+        wrap.append(el("div", { class: "act-head" }, el("h3", {}, info.name || `Acte ${act}`),
+          el("div", { class: "muted" }, `${info.subject || ""} — ${info.summary || ""}`)));
+        grid = el("div", { class: "map-regions" });
+        wrap.append(grid);
+      }
       const statuses = region.levels.map((l) => this.progress.levels[l.id].status);
       const locked = statuses.every((s) => s === "locked");
       const card = el("div", { class: `region-card theme-${region.theme} ${locked ? "locked" : ""}` },
@@ -578,10 +641,9 @@ Ta progression est sauvegardée automatiquement.`) }));
           onclick: () => st !== "locked" && this.openLevel(level.id),
         }, el("span", { class: "ic" }, icon[st]), `${level.number} ${level.title}`, level.boss ? el("span", { class: "boss-tag" }, "BOSS") : null));
       });
-      card.append(el("div", { class: "reward" }, `Récompense : ${region.reward}`));
+      card.append(el("div", { class: "reward" }, `${region.icon} Récompense : ${region.reward}`));
       grid.append(card);
     }
-    wrap.append(grid);
     this.overlay(wrap);
   }
 
@@ -597,10 +659,11 @@ Ta progression est sauvegardée automatiquement.`) }));
       el("span", { class: "notion-chip st-unknown" }, `Pas encore vues : ${counts.unknown || 0}`)));
     const grid = el("div", { class: "dash-grid" });
     const notions = el("div", {}, el("h3", {}, "Notions du programme"));
-    const groups = { A: "Structure", B: "POO", C: "Encapsulation", D: "Héritage", E: "Méthodes avancées", F: "Architecture", G: "Qualité" };
+    const groups = { H: "Fondamentaux (python00)", A: "Structure (python01)", B: "POO", C: "Encapsulation", D: "Héritage",
+      E: "Méthodes avancées", F: "Architecture", G: "Qualité", X: "Exceptions (python02)", K: "Collections (python03)" };
     for (const [letter, name] of Object.entries(groups)) {
       const line = el("div", {}, el("div", { class: "small muted" }, `${letter}. ${name}`));
-      Object.entries(this.curriculum.notions).filter(([id]) => id.startsWith(letter)).forEach(([id, label]) => {
+      Object.entries(this.curriculum.notions).filter(([id]) => id[0] === letter).forEach(([id, label]) => {
         line.append(el("span", { class: `notion-chip st-${p.notions[id]}`, title: p.notions[id] }, `${id} ${label}`));
       });
       notions.append(line);
@@ -628,6 +691,14 @@ Ta progression est sauvegardée automatiquement.`) }));
     } }, "Réinitialiser toute la progression")));
     this.overlay(wrap);
   }
+}
+
+function splitArgs(text) {
+  const args = [];
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) args.push(m[1] ?? m[2] ?? m[3]);
+  return args;
 }
 
 const app = new App();

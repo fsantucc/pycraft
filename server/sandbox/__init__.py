@@ -39,11 +39,14 @@ def _limit_resources() -> None:  # pragma: no cover - runs in the child
 
 def execute(files: dict[str, str], *, entry: str = "main.py",
             trace: bool = True, checks: list[dict[str, Any]] | None = None,
-            max_steps: int = 4000, seed: int = 42) -> dict[str, Any]:
+            max_steps: int = 4000, seed: int = 42,
+            stdin: list[str] | None = None,
+            argv: list[str] | None = None) -> dict[str, Any]:
     """Run the learner's files in a sandboxed child process."""
     request = json.dumps({
         "files": files, "entry": entry, "trace": trace,
         "checks": checks or [], "max_steps": max_steps, "seed": seed,
+        "stdin": stdin or [], "argv": argv or [],
     })
     posix = os.name == "posix"
     with tempfile.TemporaryDirectory(prefix="pycraft-") as workdir:

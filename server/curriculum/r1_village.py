@@ -379,8 +379,8 @@ print(double("ab"))
 )
 
 REGION = Region(
-    id="r1", name="Le Village des Bâtisseurs",
-    subtitle="Structure d'un programme Python", theme="village",
-    reward="Pioche en bois — débloque l'Atelier des Créateurs",
-    levels=[L1, L2, L3],
+    id="r1", name="Le Portail des Bâtisseurs",
+    subtitle="Point d'entrée, modules, shebang, conventions", theme="village",
+    reward="Plan de bâtisseur — débloque l'Atelier des Créateurs",
+    levels=[L2, L3], act=2, icon="📜",
 )

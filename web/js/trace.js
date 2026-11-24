@@ -56,8 +56,15 @@ export class TraceModel {
       case "print": s.output.push(ev.text); break;
       case "call": s.stack.push(ev); break;
       case "func_call": s.stack.push({ ...ev, cls: null, method: ev.name }); break;
+      case "gen_start":
+      case "gen_resume": s.stack.push({ ...ev, type: "gen", cls: null, method: ev.name }); break;
       case "return":
-      case "func_return": s.stack.pop(); break;
+      case "func_return":
+      case "yield":
+      case "aborted":
+      case "gen_end": s.stack.pop(); break;
+      case "input": s.output.push(`${ev.prompt}${ev.value}`); break;
+      case "raise": s.lastRaise = ev; break;
       case "error": s.error = ev; break;
       default: break;
     }
@@ -162,7 +169,25 @@ export function describe(ev, state) {
     case "print":
       return { k: "print", ic: "💬", html: `Affiche : ${c(ev.text)}` };
     case "error":
-      return { k: "bad", ic: "💥", html: `<b>${esc(ev.etype)}</b> : ${esc(ev.message)}` };
+      return { k: "bad", ic: "💥", html: `<b>${esc(ev.etype)}</b> non attrapée : ${esc(ev.message)} — le programme s'arrête.` };
+    case "raise":
+      return { k: "bad", ic: "⚡", html: `Exception <b>${esc(ev.etype)}</b> levée dans ${c(ev.func === "<module>" ? "le programme principal" : ev.func + "()")} : ${esc(ev.message)}` };
+    case "aborted":
+      return { k: "bad", ic: "⏏", html: `${c((ev.cls ? ev.cls + "." : "") + ev.name + "()")} est <b>interrompue</b> par ${c(ev.etype)} : la suite de la fonction n'est pas exécutée.` };
+    case "propagate":
+      return { k: "bad", ic: "⤴", html: `${c(ev.etype)} remonte dans ${c(ev.func === "<module>" ? "le programme principal" : ev.func + "()")} (pas de except adapté plus bas).` };
+    case "caught":
+      return { k: "spawn", ic: "🥅", html: `${c(ev.etype)} <b>attrapée</b> (ligne ${ev.line}) : le programme continue.` };
+    case "input":
+      return { k: "print", ic: "⌨️", html: `input(${c(JSON.stringify(ev.prompt))}) → l'utilisateur tape ${c(ev.value)} (une chaîne !)` };
+    case "gen_start":
+      return { k: "static", ic: "🌀", html: `Premier next() : le générateur ${c(ev.name + "()")} démarre.` };
+    case "gen_resume":
+      return { k: "static", ic: "▶️", html: `Le générateur ${c(ev.name + "()")} reprend juste après son dernier yield.` };
+    case "yield":
+      return { k: "static", ic: "✨", html: `${c("yield")} : ${c(ev.name + "()")} produit ${c(showValue(ev.value))} puis se met en pause.` };
+    case "gen_end":
+      return { k: "static", ic: "⏹", html: `Le générateur ${c(ev.name + "()")} est terminé (épuisé).` };
     default:
       return { k: "", ic: "•", html: esc(ev.type) };
   }

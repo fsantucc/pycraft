@@ -1,14 +1,37 @@
-"""The PyCraft curriculum: 7 regions, 23 levels."""
+"""The PyCraft curriculum: 4 acts (python00 → python03), 13 regions."""
 from __future__ import annotations
 
 from .model import Level, Region
-from . import (r1_village, r2_atelier, r3_citadelle, r4_forge, r5_labo,
-               r6_tour, r7_royaume)
+from . import (r0_prairie, r1_village, r2_atelier, r3_citadelle, r4_forge,
+               r5_labo, r6_tour, r7_royaume, r8_faille, r9_biblio)
+
+ACTS: dict[int, dict[str, str]] = {
+    1: {"name": "Acte I — Les Fondations", "subject": "python00 · Growing Code",
+        "summary": "Fonctions, entrées, calculs, conditions, boucles, récursion"},
+    2: {"name": "Acte II — L'Ère des Créateurs",
+        "subject": "python01 · Code Cultivation",
+        "summary": "Programmation orientée objet"},
+    3: {"name": "Acte III — Les Terres Instables",
+        "subject": "python02 · Garden Guardian",
+        "summary": "Exceptions et programmes qui ne plantent jamais"},
+    4: {"name": "Acte IV — Le Royaume des Données",
+        "subject": "python03 · Data Quest",
+        "summary": "Collections, générateurs, compréhensions, grande finale"},
+}
 
 REGIONS: list[Region] = [
+    r0_prairie.REGION_PRAIRIE, r0_prairie.REGION_MINES,
     r1_village.REGION, r2_atelier.REGION, r3_citadelle.REGION,
     r4_forge.REGION, r5_labo.REGION, r6_tour.REGION, r7_royaume.REGION,
+    r8_faille.REGION,
+    r9_biblio.REGION_BIBLIO, r9_biblio.REGION_SOURCE, r9_biblio.REGION_COEUR,
 ]
+
+# Level numbers follow the order of the adventure: region.level
+for _r_index, _region in enumerate(REGIONS, start=1):
+    for _l_index, _level in enumerate(_region.levels, start=1):
+        _level.number = f"{_r_index}.{_l_index}"
+        _level.region = _region.id
 
 LEVELS: dict[str, Level] = {
     level.id: level for region in REGIONS for level in region.levels
@@ -52,12 +75,38 @@ NOTIONS: dict[str, str] = {
     "G6": "Organisation du code", "G7": "flake8", "G8": "mypy",
     "G9": "Code lisible", "G10": "Tests", "G11": "Ne jamais planter",
     "G12": "Expliquer son code",
+    "H1": "Définir et appeler une fonction",
+    "H2": "Fichier de fonctions + testeur",
+    "H3": "input()", "H4": "int() et types str / int",
+    "H5": "Opérateurs + - * / // %", "H6": "if / elif / else",
+    "H7": "Comparaisons et valeurs limites", "H8": "Boucle for / range()",
+    "H9": "Boucle while", "H10": "Accumulateur", "H11": "Récursion et cas de base",
+    "H12": "Itératif vs récursif", "H13": "Fonction auxiliaire / défaut",
+    "H14": "return vs print", "H15": "Méthodes de chaînes",
+    "H16": "Annotations obligatoires", "H17": "Style flake8",
+    "X1": "try / except", "X2": "Message d'erreur (as e)",
+    "X3": "Ne jamais planter", "X4": "raise", "X5": "Valider en levant",
+    "X6": "Propagation dans la pile", "X7": "Types d'exceptions intégrés",
+    "X8": "Plusieurs except / tuple", "X9": "Attraper par famille",
+    "X10": "Exceptions personnalisées", "X11": "Message par défaut",
+    "X12": "finally", "X13": "Libérer les ressources", "X14": "open()",
+    "K1": "sys.argv", "K2": "Listes : index, len, tranches",
+    "K3": "Méthodes de liste, tri", "K4": "sum / min / max",
+    "K5": "Tuples immuables, déballage", "K6": "math.sqrt",
+    "K7": "Boucle de réessai", "K8": "Ensembles (unicité)",
+    "K9": "Union / intersection / différence", "K10": "random",
+    "K11": "Dictionnaires", "K12": "keys / values / items / get / update",
+    "K13": "Générateurs (yield)", "K14": "next() et flux infini",
+    "K15": "Générateur dans un for", "K16": "Compréhension de liste",
+    "K17": "Compréhension de dict", "K18": "Compréhension d'ensemble",
+    "K19": "Filtrer avec if", "K20": "Choisir la bonne collection",
 }
 
 
 def public_curriculum() -> dict[str, object]:
     return {
         "regions": [region.public() for region in REGIONS],
+        "acts": ACTS,
         "notions": NOTIONS,
         "order": ORDER,
     }

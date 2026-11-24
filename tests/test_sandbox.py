@@ -96,3 +96,34 @@ def test_checks_run_after_program() -> None:
         checks=[{"id": "a", "code": "assert value == 3"},
                 {"id": "b", "code": "fail('non')"}])
     assert [c["ok"] for c in result["checks"]] == [True, False]
+
+
+def test_input_argv_and_virtual_open() -> None:
+    code = ("import sys\nnom = input('Nom ? ')\nprint(nom, sys.argv[1:])\n"
+            "try:\n    open('absent.txt')\nexcept FileNotFoundError as e:\n"
+            "    print(e)\n")
+    result = sandbox.execute({"main.py": code}, stdin=["Alex"],
+                             argv=["a", "b c"])
+    assert result["output"] == ("Nom ? Alex\nAlex ['a', 'b c']\n"
+                                "[Errno 2] No such file or directory: "
+                                "'absent.txt'\n")
+    kinds = [e["type"] for e in events(result)]
+    assert "input" in kinds
+    missing = sandbox.execute({"main.py": "input('x')"})
+    assert missing["error"]["type"] == "EOFError"
+    write = sandbox.execute({"main.py": "open('f.txt', 'w')"})
+    assert write["error"]["type"] == "PermissionError"
+
+
+def test_exception_events() -> None:
+    code = ('def f() -> None:\n    raise ValueError("non")\n\n\n'
+            'try:\n    f()\nexcept ValueError:\n    pass\n')
+    kinds = [e["type"] for e in events(sandbox.execute({"main.py": code}))]
+    assert kinds.index("raise") < kinds.index("aborted") \
+        < kinds.index("caught")
+
+
+def test_generator_events() -> None:
+    code = "def g():\n    yield 1\n    yield 2\n\n\nfor x in g():\n    pass\n"
+    kinds = [e["type"] for e in events(sandbox.execute({"main.py": code}))]
+    assert kinds.count("yield") == 2 and "gen_end" in kinds

@@ -35,6 +35,34 @@ function num(v) {
 
 const B = (x, y, z, w, d, h, c, role) => ({ x, y, z, w, d, h, c, role });
 
+function shadeColor(hex, f) {
+  if (!hex.startsWith("#")) return hex;
+  const n = parseInt(hex.slice(1), 16);
+  const ch = (v) => Math.min(255, Math.round(v * f)).toString(16).padStart(2, "0");
+  return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
+}
+
+// The town crier: a villager in a red and gold robe, with a hat and a bell.
+export function crierParts(ringing) {
+  const parts = humanoid({ head: "#d4a373", body: "#a8322a", legs: "#5a2a20", arms: "#8c2a22", nose: true });
+  const L = 0.75;
+  parts.push(
+    B(0.18, 0.2, L + 1.25, 0.64, 0.6, 0.08, "#2b2118", "head"),
+    B(0.3, 0.32, L + 1.33, 0.4, 0.36, 0.22, "#2b2118", "head"),
+    B(0.31, 0.33, L + 1.36, 0.38, 0.34, 0.05, "#f2c14e", "head"),
+    B(0.22, 0.672, L + 0.1, 0.56, 0.01, 0.6, "#f2c14e", "body"),
+    B(0.22, 0.673, L + 0.5, 0.56, 0.01, 0.08, "#2b2118", "body"),
+  );
+  const arm = parts.find((p) => p.role === "armR");
+  if (ringing) {
+    arm.z += 0.55;
+    arm.h = 0.6;
+  }
+  parts.push(B(0.86, 0.42, arm.z + arm.h - 0.05, 0.16, 0.16, 0.18, "#f2c14e", "bell"),
+    B(0.9, 0.46, arm.z + arm.h + 0.12, 0.08, 0.08, 0.08, "#7a5a1a", "bell"));
+  return parts;
+}
+
 function humanoid({ head = "#c99a6c", body = "#39a0c4", legs = "#3b3b8f", arms = null, scale = 1,
   hair = null, nose = false, eyes = null, tall = 1 }) {
   const s = scale;
@@ -48,8 +76,16 @@ function humanoid({ head = "#c99a6c", body = "#39a0c4", legs = "#3b3b8f", arms =
     B(0.25 * s, 0.25 * s, L + 0.75 * s, 0.5 * s, 0.5 * s, 0.5 * s, head, "head"),
   ];
   if (hair) parts.push(B(0.24 * s, 0.24 * s, L + 1.12 * s, 0.52 * s, 0.52 * s, 0.14 * s, hair, "head"));
-  if (nose) parts.push(B(0.44 * s, 0.75 * s, L + 0.8 * s, 0.12 * s, 0.12 * s, 0.22 * s, "#b07a55", "head"));
-  if (eyes) parts.push(B(0.3 * s, 0.751 * s, L + 1.0 * s, 0.4 * s, 0.01, 0.08 * s, eyes, "head"));
+  if (nose) parts.push(B(0.44 * s, 0.75 * s, L + 0.8 * s, 0.12 * s, 0.12 * s, 0.22 * s, shadeColor(head, 0.85), "head"));
+  if (eyes) {
+    parts.push(B(0.3 * s, 0.751 * s, L + 1.0 * s, 0.4 * s, 0.01, 0.08 * s, eyes, "eye"));
+  } else {
+    parts.push(B(0.3 * s, 0.752 * s, L + 0.98 * s, 0.13 * s, 0.01, 0.1 * s, "#f4f4f4", "eye"),
+      B(0.57 * s, 0.752 * s, L + 0.98 * s, 0.13 * s, 0.01, 0.1 * s, "#f4f4f4", "eye"),
+      B(0.37 * s, 0.754 * s, L + 0.98 * s, 0.06 * s, 0.01, 0.1 * s, "#2b2b5a", "eye"),
+      B(0.64 * s, 0.754 * s, L + 0.98 * s, 0.06 * s, 0.01, 0.1 * s, "#2b2b5a", "eye"));
+  }
+  parts.push(B(0.22 * s, 0.33 * s, L + 0.02 * s, 0.56 * s, 0.341 * s, 0.1 * s, shadeColor(body, 0.7), "body"));
   return parts;
 }
 
@@ -64,7 +100,10 @@ function quadruped({ body, head = body, legs = body, scale = 1, low = false, eye
     B(0.08 * s, 0.22 * s, lh * s, 0.84 * s, 0.6 * s, 0.45 * s, body, "body"),
     B(0.3 * s, 0.72 * s, (lh + 0.2) * s, 0.42 * s, 0.38 * s, 0.4 * s, head, "head"),
   ];
-  if (eyes) parts.push(B(0.34 * s, 1.101 * s, (lh + 0.42) * s, 0.34 * s, 0.01, 0.08 * s, eyes, "head"));
+  const eyeColor = eyes || "#1b1b1b";
+  parts.push(B(0.34 * s, 1.102 * s, (lh + 0.42) * s, 0.09 * s, 0.01, 0.09 * s, eyeColor, "eye"),
+    B(0.59 * s, 1.102 * s, (lh + 0.42) * s, 0.09 * s, 0.01, 0.09 * s, eyeColor, "eye"),
+    B(0.43 * s, 1.102 * s, (lh + 0.24) * s, 0.16 * s, 0.01, 0.1 * s, shadeColor(head, 0.75), "head"));
   return parts.concat(extra);
 }
 
@@ -200,6 +239,12 @@ export function modelFor(qualname, classes) {
 }
 
 export function buildParts(qualname, attrs, classes) {
+  const info = classes[qualname];
+  if (info && info.mro && info.mro.includes("BaseException")) {
+    // An exception class: a block of TNT, ready to go off.
+    return { parts: [B(0.1, 0.1, 0, 0.8, 0.8, 0.8, "#c0392b", "body"), B(0.08, 0.08, 0.3, 0.84, 0.84, 0.22, "#eeeeee", "body"),
+      B(0.45, 0.45, 0.8, 0.1, 0.1, 0.2, "#3a2a1a", "head")], inheritedFrom: null };
+  }
   const { model, source } = modelFor(qualname, classes);
   const name = qualname.toLowerCase();
   const color = hashColor(qualname);

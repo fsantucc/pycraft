@@ -438,4 +438,5 @@ REGION = Region(
     subtitle="Encapsulation et protection des données", theme="citadelle",
     reward="Bouclier de fer — débloque la Forge des Lignées",
     levels=[L1, L2, L3],
+    act=2, icon="🛡",
 )

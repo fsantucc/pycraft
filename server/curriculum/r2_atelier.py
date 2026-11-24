@@ -9,7 +9,7 @@ def make(cls):
         return cls()
     except TypeError:
         fail(f"`{cls.__name__}()` doit pouvoir être créé sans argument "
-             "dans ce niveau (le constructeur arrive au niveau 2.4).")
+             "dans ce niveau (le constructeur arrive au niveau « L'usine à outils »).")
 '''
 
 L1 = Level(
@@ -39,7 +39,7 @@ Un **attribut** est une donnée rangée **dans** un objet : `zombie_1.speed = 2`
 
 À retenir : **classe = modèle**, **objet = exemplaire**, **attribut = donnée d'un exemplaire**.
 
-*Remarque qualité* : mypy signale `"Zombie" has no attribute "speed"`, car le plan ne déclare pas cet attribut. C'est normal à ce stade : le constructeur (niveau 2.4) réglera ce problème.""",
+*Remarque qualité* : mypy signale `"Zombie" has no attribute "speed"`, car le plan ne déclare pas cet attribut. C'est normal à ce stade : le constructeur (niveau « L'usine à outils ») réglera ce problème.""",
     demo={"main.py": '''class Zombie:
     pass
 
@@ -702,4 +702,5 @@ REGION = Region(
     theme="atelier",
     reward="Établi enchanté — débloque la Citadelle des Gardiens",
     levels=[L1, L2, L3, L4, L5],
+    act=2, icon="🛠",
 )

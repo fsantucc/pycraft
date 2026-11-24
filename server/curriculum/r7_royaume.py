@@ -171,4 +171,5 @@ REGION = Region(
     id="r7", name="Le Royaume Automatisé", subtitle="Épreuve finale",
     theme="royaume", reward="Couronne de l'architecte — PyCraft terminé !",
     levels=[FINAL],
+    act=2, icon="👑",
 )

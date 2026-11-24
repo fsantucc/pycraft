@@ -136,6 +136,14 @@ def _rules(kind: str, message: str, code: str) -> tuple[str, str, str]:
         return ("Ton programme ne s'arrête pas (ou trop tard).", message,
                 "La condition de ta boucle finit-elle par devenir "
                 "fausse ? Que vaut la variable testée à chaque tour ?")
+    if kind == "ImportError" and "cannot import name" in message:
+        name = _first(r"cannot import name '(\w+)'", message)
+        return (f"`{name}` est introuvable dans ton fichier.",
+                "L'assistant main.py importe ta fonction par son nom exact. "
+                "Tant qu'elle n'existe pas (ou porte un autre nom), "
+                "l'import échoue.",
+                f"As-tu bien écrit `def {name}(...)` dans ton fichier, avec "
+                "exactement ce nom ?")
     if kind == "ImportError" or kind == "ModuleNotFoundError":
         return ("Import impossible.", message,
                 "Le nom du module correspond-il au nom du fichier, sans "
@@ -148,12 +156,40 @@ def _rules(kind: str, message: str, code: str) -> tuple[str, str, str]:
         return ("Trop de mémoire utilisée.",
                 "Une liste ou une chaîne devient gigantesque.",
                 "Une boucle ajoute-t-elle des éléments sans fin ?")
+    if kind == "EOFError":
+        return ("Ton programme demande une valeur au clavier, mais il n'y "
+                "en a plus.",
+                "Dans PyCraft, ce que tape l'utilisateur se règle dans "
+                "« Entrées du programme » : une ligne par appel à input().",
+                "Combien de fois input() est-il appelé ? Combien de lignes "
+                "as-tu préparées ?")
+    if kind == "UnboundLocalError":
+        return ("Variable locale utilisée avant d'avoir reçu une valeur.",
+                "Si une fonction affecte une variable, Python la considère "
+                "comme locale dans toute la fonction.",
+                "Cette variable reçoit-elle une valeur avant cette ligne, "
+                "dans tous les cas (if / else) ?")
+    if kind == "StopIteration":
+        return ("Le générateur est épuisé.",
+                "next() a été appelé alors qu'il n'y avait plus de valeur "
+                "à produire.",
+                "Combien de valeurs ce générateur peut-il produire ? Une "
+                "boucle for s'arrête toute seule, next() non.")
+    if kind == "FileNotFoundError":
+        return ("Le fichier demandé n'existe pas.", message,
+                "Une ouverture de fichier peut échouer : c'est exactement "
+                "le genre d'opération à protéger avec try / except.")
+    if kind == "KeyError":
+        return (f"La clé {message} n'existe pas dans le dictionnaire.",
+                "d[cle] exige une clé présente.",
+                "Teste avec `cle in d`, ou utilise d.get(cle, valeur).")
+    if kind == "IndexError":
+        return ("Index en dehors de la liste.", message,
+                "Une liste de n éléments a des index de 0 à n - 1. "
+                "Que vaut len() à ce moment ?")
     if kind == "ValueError":
         return ("Valeur incorrecte.", message,
                 "Quelle valeur reçoit cette ligne ?")
-    if kind in ("KeyError", "IndexError"):
-        return ("Accès à un élément qui n'existe pas.", message,
-                "Que contient la collection à ce moment ?")
     return (f"Erreur {kind}.", message, "Lis la ligne indiquée.")
 
 

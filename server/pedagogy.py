@@ -28,17 +28,32 @@ def clean_files(files: Any) -> dict[str, str]:
     return cleaned
 
 
-def run_code(files: dict[str, str], entry: str = "main.py") -> dict[str, Any]:
-    result = sandbox.execute(files, entry=entry, trace=True)
+def clean_lines(values: Any, limit: int = 60) -> list[str]:
+    if not isinstance(values, list):
+        return []
+    return [str(v)[:500] for v in values[:limit]]
+
+
+def run_code(files: dict[str, str], entry: str = "main.py",
+             stdin: list[str] | None = None,
+             argv: list[str] | None = None) -> dict[str, Any]:
+    result = sandbox.execute(files, entry=entry, trace=True, stdin=stdin,
+                             argv=argv)
     if result.get("error"):
         result["error"]["help"] = explain(result["error"], files)
     return result
 
 
 def check_mission(store: ProgressStore, level_id: str,
-                  files: dict[str, str]) -> dict[str, Any]:
+                  files: dict[str, str], stdin: list[str] | None = None,
+                  argv: list[str] | None = None) -> dict[str, Any]:
     level = LEVELS[level_id]
-    trace = run_code(files)
+    for name, source in level.starter.items():
+        if name in level.readonly:
+            files[name] = source  # read-only helpers cannot be changed
+    stdin = level.stdin if stdin is None else stdin
+    argv = level.argv if argv is None else argv
+    trace = run_code(files, stdin=stdin, argv=argv)
     results: list[dict[str, Any]] = []
     trees = {name: static_checks.parse(src) for name, src in files.items()}
 
@@ -47,7 +62,8 @@ def check_mission(store: ProgressStore, level_id: str,
     if dynamic_checks and not trace.get("error"):
         run = sandbox.execute(
             files, trace=False, seed=int(time.time()) % 10_000,
-            checks=[{"id": c.id, "code": c.code} for c in dynamic_checks])
+            checks=[{"id": c.id, "code": c.code} for c in dynamic_checks],
+            stdin=stdin, argv=argv)
         if run.get("error"):
             trace["error"] = run["error"]
             trace["error"]["help"] = explain(run["error"], files)
@@ -160,7 +176,8 @@ def grade_question(store: ProgressStore, level_id: str, index: int,
     question = level.quiz[index]
     response: dict[str, Any] = {"explanation": question.explanation}
     if question.kind == "predict":
-        run = sandbox.execute({"main.py": question.code}, trace=False)
+        run = sandbox.execute({"main.py": question.code}, trace=False,
+                              stdin=question.stdin, argv=[])
         expected = normalize_output(run.get("output", ""))
         if run.get("error"):
             err = run["error"]

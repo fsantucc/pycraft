@@ -345,4 +345,5 @@ REGION = Region(
     subtitle="Méthodes statiques et méthodes de classe", theme="labo",
     reward="Comparateur de redstone — débloque la Tour des Architectes",
     levels=[L1, L2, L3],
+    act=2, icon="🔴",
 )
