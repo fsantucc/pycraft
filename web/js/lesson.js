@@ -1,6 +1,7 @@
 // The tutor: the 7-step learning flow of a level.
 // Découverte → Explication → Démonstration → Expérimentation → Mission →
 // Vérification → Maîtrise.
+import { sound } from "./sound.js";
 import { api, el, esc, md, toast } from "./util.js";
 
 export const STEPS = [
@@ -238,6 +239,7 @@ export class LessonPanel {
   async askHint() {
     try {
       const res = await api("/api/hint", { level: this.app.level.id });
+      sound.play("hint");
       this.hints = res.all;
       await this.app.refreshProgress();
       this.render();
@@ -302,6 +304,7 @@ export class LessonPanel {
     }
     try {
       const res = await api("/api/quiz", { level: this.app.level.id, index, answer });
+      sound.play(res.correct ? "pop" : "shield");
       let fb = "";
       if (res.correct) {
         fb = `<span style="color:#b8f36b">✓ Exact.</span> ${esc(res.explanation)}`;

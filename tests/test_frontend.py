@@ -80,7 +80,7 @@ def test_every_element_id_used_by_the_code_exists() -> None:
         source = path.read_text(encoding="utf-8")
         used |= set(re.findall(r'\$\("([\w-]+)"\)', source))
         used |= set(re.findall(r'getElementById\("([\w-]+)"\)', source))
-    created = {"overlay-body"}  # ids that may be created dynamically
+    created = {"overlay-body", "sound-panel"}  # ids created dynamically
     missing = sorted(used - ids - created)
     assert not missing, f"ids absents de index.html : {missing}"
 
@@ -255,3 +255,49 @@ def test_browser_smoke(server_url: str) -> None:
         assert page.locator(".tour").count() == 0
         browser.close()
     assert not errors, errors
+
+
+def test_every_sound_renders_cleanly(server_url: str) -> None:
+    """Each synthesized sound and each regional music is rendered offline
+    in the browser: it must be audible, finite and never clip."""
+    playwright = pytest.importorskip("playwright.sync_api")
+    chrome = _browser()
+    if chrome is None:
+        pytest.skip("aucun navigateur Chrome/Chromium")
+    with playwright.sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=chrome,
+                                    args=["--no-sandbox"])
+        page = browser.new_page()
+        page.goto(server_url)
+        page.wait_for_timeout(800)
+        levels: Any = page.evaluate("""async () => {
+            const mod = await import('/js/sound.js');
+            const measure = (buf) => {
+                let peak = 0;
+                let bad = 0;
+                for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+                    for (const v of buf.getChannelData(ch)) {
+                        if (!Number.isFinite(v)) bad++;
+                        peak = Math.max(peak, Math.abs(v));
+                    }
+                }
+                return { peak, bad };
+            };
+            const out = {};
+            for (const name of mod.SOUND_NAMES) {
+                out[name] = measure(await mod.renderOffline(
+                    OfflineAudioContext, [[name, {}]], 2.5, 16000));
+            }
+            for (const mood of Object.keys(mod.MOODS)) {
+                out['music:' + mood] = measure(await mod.renderOffline(
+                    OfflineAudioContext, [['music:' + mood]], 6, 16000));
+            }
+            out.voice = measure(await mod.renderOffline(OfflineAudioContext,
+                [['voice', 'Bonjour, voyageur !', { pitch: 170 }]], 2, 16000));
+            return out;
+        }""")
+        browser.close()
+    assert len(levels) > 30
+    for name, level in levels.items():
+        assert level["bad"] == 0, name
+        assert 0.01 < level["peak"] < 0.98, (name, level["peak"])

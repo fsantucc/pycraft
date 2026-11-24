@@ -113,8 +113,18 @@ français puis pose des questions, une à la fois, pour t'aider à trouver la ca
 jamais donner la correction. *Montrer sur la carte* entoure dans le monde les objets,
 classes et variables en cause.
 
-**Sons** : cloche du crieur, apparition d'objets, appels, exceptions, victoire… tous
-générés par le navigateur (aucun fichier). Bouton 🔊/🔇 en haut à droite.
+**Son** (bouton 🔊 en haut à droite : volume général, effets, voix, musique) — tout est
+synthétisé par le navigateur, aucun fichier audio :
+- *effets* : cloche FM du crieur (chaque `print()` joue la note suivante d'une petite
+  mélodie), marimba pour les appels de méthode (plus aigu quand l'appel est profond),
+  construction d'une classe, apparition magique d'un objet, éclair d'une exception,
+  explosion d'une erreur, fanfare de victoire, montée de niveau… avec réverbération,
+  compresseur et son placé à gauche/droite selon l'endroit de la carte ;
+- *voix* : les personnages « parlent » en syllabes pendant que leur bulle s'écrit, chacun
+  avec sa voix (grave pour le roi, aiguë pour la bibliothécaire), et la voix monte à la
+  fin d'une question ;
+- *musique* : une ambiance calme générée note par note, différente dans chaque région
+  (gamme, tempo, instruments) ; elle se baisse toute seule pendant les grands effets.
 
 **Visite guidée** : proposée au premier lancement, rejouable avec le bouton **?**.
 

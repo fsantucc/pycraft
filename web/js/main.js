@@ -129,7 +129,52 @@ class App {
 
   updateMuteButton() {
     $("btn-sound").textContent = sound.muted ? "🔇" : "🔊";
-    $("btn-sound").title = sound.muted ? "Activer les sons" : "Couper les sons";
+    $("btn-sound").title = "Son et musique";
+  }
+
+  // Small panel under the 🔊 button: volumes of the effects, the voices of
+  // the characters and the music.
+  toggleSoundPanel() {
+    let panel = document.getElementById("sound-panel");
+    if (panel) {
+      panel.remove();
+      return;
+    }
+    const st = sound.settings;
+    const slider = (key, label, icon) => el("label", { class: "snd-row" },
+      el("span", { class: "snd-ic" }, icon), el("span", { class: "snd-lb" }, label),
+      el("input", {
+        type: "range", min: "0", max: "100", value: String(Math.round(st[key] * 100)),
+        oninput: (e) => sound.set(key, Number(e.target.value) / 100),
+        onchange: () => sound.play(key === "voice" ? "ask" : key === "music" ? "tick" : "bell"),
+      }));
+    panel = el("div", { id: "sound-panel", class: "sound-panel", onclick: (e) => e.stopPropagation() },
+      el("div", { class: "snd-head" }, el("b", {}, "Son"),
+        el("button", { class: "tiny", onclick: () => { sound.setMuted(!sound.muted); this.updateMuteButton(); panel.remove(); this.toggleSoundPanel(); } },
+          sound.muted ? "🔇 Son coupé — réactiver" : "🔊 Couper tout")),
+      slider("master", "Général", "🎚"),
+      slider("sfx", "Effets", "✨"),
+      slider("voice", "Voix", "🗣"),
+      slider("music", "Musique", "🎵"),
+      el("label", { class: "snd-check" }, el("input", {
+        type: "checkbox", checked: st.musicOn ? "checked" : null,
+        onchange: (e) => sound.set("musicOn", e.target.checked),
+      }), " Musique d'ambiance (change selon la région)"),
+      el("div", { class: "snd-test" },
+        el("button", { class: "tiny", onclick: () => sound.play("victory") }, "▶ Victoire"),
+        el("button", { class: "tiny", onclick: () => sound.voice("Bonjour, voyageur ! Tu m'entends ?", { pitch: 170 }) }, "▶ Voix"),
+        el("button", { class: "tiny", onclick: () => sound.play("boom") }, "▶ Explosion")));
+    document.body.append(panel);
+    const r = $("btn-sound").getBoundingClientRect();
+    panel.style.top = `${r.bottom + 8}px`;
+    panel.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+    const close = (e) => {
+      if (!panel.contains(e.target) && e.target !== $("btn-sound")) {
+        panel.remove();
+        window.removeEventListener("pointerdown", close);
+      }
+    };
+    window.addEventListener("pointerdown", close);
   }
 
   async refreshProgress() {
@@ -145,6 +190,13 @@ class App {
     $("xp-text").textContent = `${p.xp} XP`;
     const left = Math.max(0, p.level_next - p.xp);
     document.querySelector("#topbar .xp").title = `${p.xp} XP au total · encore ${left} XP pour le niveau ${p.player_level + 1}`;
+    if (this.lastLevel !== undefined && p.player_level > this.lastLevel) {
+      sound.play("levelup");
+      toast(`⬆ Niveau ${p.player_level} atteint !`, "xp");
+    } else if (this.lastXp !== undefined && p.xp > this.lastXp) {
+      sound.play("xp");
+    }
+    this.lastLevel = p.player_level;
     if (this.lastXp !== undefined && p.xp > this.lastXp) {
       const box = document.querySelector("#topbar .xp");
       box.classList.remove("gain");
@@ -225,7 +277,7 @@ class App {
   bindUi() {
     this.bindGutters();
     $("btn-run").addEventListener("click", () => this.runCurrent());
-    $("btn-sound").addEventListener("click", () => { sound.setMuted(!sound.muted); this.updateMuteButton(); sound.play("click"); });
+    $("btn-sound").addEventListener("click", (e) => { e.stopPropagation(); this.toggleSoundPanel(); });
     $("btn-tour").addEventListener("click", () => this.startTour());
     this.updateMuteButton();
     window.addEventListener("pycraft:achievements", (e) => this.onAchievements(e.detail));
@@ -237,8 +289,8 @@ class App {
     $("overlay-close").addEventListener("click", () => $("overlay").classList.add("hidden"));
     $("overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") $("overlay").classList.add("hidden"); });
     $("tl-play").addEventListener("click", () => (this.playing ? this.pause() : this.play()));
-    $("tl-step").addEventListener("click", () => { this.pause(); this.goto(this.index + 1, true); this.countStep(); });
-    $("tl-back").addEventListener("click", () => { this.pause(); this.goto(this.index - 1, false); this.countStep(); });
+    $("tl-step").addEventListener("click", () => { this.pause(); this.goto(this.index + 1, true); this.countStep(); sound.play("tick"); });
+    $("tl-back").addEventListener("click", () => { this.pause(); this.goto(this.index - 1, false); this.countStep(); sound.play("tick"); });
     $("tl-start").addEventListener("click", () => { this.pause(); this.goto(0, true); });
     $("tl-end").addEventListener("click", () => { this.pause(); this.goto(this.model ? this.model.count - 1 : 0, false); });
     $("tl-range").addEventListener("input", (e) => { this.pause(); this.goto(Number(e.target.value), false); });
@@ -792,6 +844,7 @@ class App {
     const body = $("overlay-body");
     body.innerHTML = "";
     body.append(content);
+    if ($("overlay").classList.contains("hidden")) sound.play("page");
     $("overlay").classList.remove("hidden");
   }
 

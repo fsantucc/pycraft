@@ -418,3 +418,12 @@ body.resizing canvas, body.resizing iframe { pointer-events: none; }
 .dialogue summary { cursor: pointer; font-weight: 700; font-size: 13px; }
 .dialogue .line { margin: 6px 0; font-size: 13px; }
 .dialogue .line b { color: #b8f36b; }
+
+/* sound settings panel */
+.sound-panel { position: fixed; z-index: 970; width: 300px; background: #2b231b; border: 2px solid #000; border-radius: 8px;
+  padding: 10px 12px; box-shadow: 0 10px 30px #000c; animation: overlay-in .18s ease-out; }
+.snd-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.snd-row { display: grid; grid-template-columns: 22px 1fr 110px; align-items: center; gap: 6px; margin: 6px 0; font-size: 12.5px; }
+.snd-row input { width: 110px; accent-color: var(--gold); }
+.snd-check { display: block; font-size: 12px; color: var(--muted); margin: 8px 0; cursor: pointer; }
+.snd-test { display: flex; gap: 6px; flex-wrap: wrap; border-top: 1px solid #0006; padding-top: 8px; }

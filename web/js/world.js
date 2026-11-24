@@ -269,6 +269,7 @@ export class World {
   setTheme(name) {
     this.themeName = THEMES[name] ? name : "village";
     this.theme = THEMES[this.themeName];
+    sound.setMood(this.themeName);
   }
 
   // ------------------------------------------------------- scene from code
@@ -537,7 +538,7 @@ export class World {
     const go = () => {
       const life = dur || Math.min(9000, 2400 + String(text).length * 45);
       this.npcPose(n.id, "talk", Math.min(life, 2200));
-      sound.play("blip");
+      sound.voice(String(text), voiceOf(n), { pan: this.panAt(this.npcTop(n.id)) });
       this.addEffect({ kind: "bubble", at: this.npcTop(n.id), text: answer ? `🗣 ${text}` : String(text), dur: life, owner: `npc:${n.id}`, npc: true });
     };
     if (delay) this.introTimers.push(setTimeout(go, delay)); else go();
@@ -729,12 +730,44 @@ export class World {
     }
   }
 
+  // Left/right position of a point of the world, for stereo sound.
+  panAt(at) {
+    if (!at || !this.width) return 0;
+    const [x] = at();
+    return Math.max(-0.8, Math.min(0.8, (x / this.width) * 2 - 1));
+  }
+
+  soundOf(ev) {
+    let name = EVENT_SOUNDS[ev.type];
+    if (!name) return;
+    if (ev.type === "return" && !ev.rejected) return;
+    const opts = {};
+    if (ev.type === "print") {
+      if (ev.oid && !ev.oid.startsWith("class:")) {
+        name = "blip";
+        opts.pan = this.panAt(this.entityTop(ev.oid));
+      } else {
+        opts.pan = this.panAt(this.crierTop());
+      }
+    } else if (ev.type === "call" || ev.type === "func_call") {
+      opts.depth = this.stack.length;
+      if (ev.oid) opts.pan = this.panAt(this.entityTop(ev.oid));
+    } else if (ev.type === "spawn" && ev.oid) {
+      opts.pan = this.panAt(() => {
+        const e = this.entities.get(ev.oid);
+        return e ? this.project(e.tx + 0.5, e.ty + 0.5, 1) : [this.width / 2, 0];
+      });
+    } else if (ev.type === "input") {
+      opts.pan = this.panAt(this.crierTop());
+    }
+    sound.play(name, opts);
+  }
+
   // Turn the events of one execution step into visible effects.
   animateEvents(events, state) {
     const names = TraceModel.names(state);
     for (const ev of events) {
-      const noise = EVENT_SOUNDS[ev.type];
-      if (noise) sound.play(ev.type === "return" && !ev.rejected ? null : ev.type === "print" && ev.oid ? "blip" : noise);
+      this.soundOf(ev);
       switch (ev.type) {
         case "class_def": {
           this.pulseBlueprint(ev.cls, "#5ee6e0");
@@ -2002,6 +2035,20 @@ export class World {
 }
 
 // Sound played for each kind of trace event (see sound.js).
+// Each character keeps his voice: pitch from his look, a little variation
+// from his name.
+const VOICE_PITCH = {
+  elder: 120, chief: 105, villager: 175, guard: 110, miner: 115, builder: 140, artisan: 125, smith: 95,
+  lord: 150, engineer: 230, alchemist: 100, architect: 135, general: 98, king: 92, keeper: 120,
+  librarian: 240, cartographer: 130, explorer: 215, player: 190, runner: 250, cook: 145,
+};
+function voiceOf(npc) {
+  let h = 0;
+  for (const ch of String(npc.name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const base = VOICE_PITCH[npc.skin] || 160;
+  return { pitch: base * (0.94 + (h % 13) / 100), speed: 0.068 + (h % 5) / 200 };
+}
+
 const EVENT_SOUNDS = {
   class_def: "build", spawn: "spawn", print: "bell", call: "blip", func_call: "blip", input: "ask",
   raise: "zap", error: "boom", caught: "pop", yield: "twinkle", return: "shield",

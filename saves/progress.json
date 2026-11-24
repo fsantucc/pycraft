@@ -1,0 +1,170 @@
+{
+ "version": 1,
+ "xp": 340,
+ "levels": {
+  "a1l1": {
+   "steps_seen": [
+    "story",
+    "demo",
+    "experiment",
+    "mission",
+    "quiz",
+    "mastery"
+   ],
+   "mission_passed": true,
+   "attempts": 1,
+   "hints_used": 0,
+   "quiz": {
+    "0": {
+     "attempts": 1,
+     "correct": true,
+     "first_try": true
+    },
+    "1": {
+     "attempts": 1,
+     "correct": true,
+     "first_try": true
+    },
+    "2": {
+     "attempts": 1,
+     "correct": true,
+     "first_try": true
+    },
+    "3": {
+     "attempts": 1,
+     "correct": true,
+     "first_try": true,
+     "text": "dnfgx.fgn.sknfgsnf.gfgnsf.,gnsf.gnsdfkgs.fgksmk/fmgsfgsdfgsfg"
+    }
+   },
+   "code": {
+    "lanterne.py": "# Écris ta fonction ici.\ndef allumer_lanterne():\n    print(\"La lanterne s'allume.\")\n    print(\"Les villageois rentrent chez eux.\")",
+    "main.py": "# Assistant du village : NE PAS MODIFIER (fichier verrouillé).\n# Comme un testeur, il importe ta fonction et l'appelle.\nfrom lanterne import allumer_lanterne\n\nprint(\"La nuit tombe...\")\nallumer_lanterne()\nprint(\"Plus tard dans la nuit...\")\nallumer_lanterne()\n"
+   },
+   "xp": {
+    "mission": 80,
+    "quiz0": 20,
+    "quiz1": 20,
+    "quiz2": 20,
+    "quiz3": 20
+   },
+   "quality_bonus": false,
+   "history": [
+    {
+     "t": 1795531921.2490084,
+     "passed": 4,
+     "total": 4
+    }
+   ],
+   "reviewing": false
+  },
+  "r1l1": {
+   "steps_seen": [
+    "story",
+    "explain",
+    "demo",
+    "experiment",
+    "mission",
+    "quiz",
+    "mastery"
+   ],
+   "mission_passed": true,
+   "attempts": 1,
+   "hints_used": 0,
+   "quiz": {
+    "1": {
+     "attempts": 1,
+     "correct": true,
+     "first_try": true
+    },
+    "2": {
+     "attempts": 1,
+     "correct": true,
+     "first_try": true
+    },
+    "3": {
+     "attempts": 1,
+     "correct": true,
+     "first_try": true,
+     "text": "dflkjdfgs;jnfdg;s/fglsfhgsfklngs.kdjfngsfgsdfgfdgsfg"
+    },
+    "0": {
+     "attempts": 1,
+     "correct": true,
+     "first_try": true
+    }
+   },
+   "code": {
+    "main.py": "# Le registre de la forge\n# Écris ton programme ici.\nforge_name = \"metalforge\"\niron_ingots = 481\ncoal_ratio = 1.3\nis_open = bool(1)\n\ncoal_needed = iron_ingots * coal_ratio\nprint(f\"La nouvelle forge s'apelle {forge_name}\")\nprint(f\"et nous avons besoin de {coal_needed} charbon\")\n\nprint(\"Une livraison de iron arrive\")\niron_ingots = iron_ingots + 5\ncoal_needed = coal_ratio * iron_ingots\n\nprint(f\"Nous avons maintenant besoin de {coal_needed} charbon\")"
+   },
+   "xp": {
+    "mission": 100,
+    "quiz1": 20,
+    "quiz2": 20,
+    "quiz3": 20,
+    "quiz0": 20
+   },
+   "quality_bonus": false,
+   "history": [
+    {
+     "t": 1795532307.6889918,
+     "passed": 4,
+     "total": 4
+    }
+   ],
+   "reviewing": false
+  },
+  "a1l3": {
+   "steps_seen": [
+    "story",
+    "explain",
+    "demo",
+    "experiment"
+   ],
+   "mission_passed": false,
+   "attempts": 0,
+   "hints_used": 0,
+   "quiz": {},
+   "code": {},
+   "xp": {},
+   "quality_bonus": false,
+   "history": [],
+   "reviewing": false,
+   "sandbox": {
+    "main.py": "def demander_age() -> None:\n    texte = input(\"Quel âge as-tu ? \")\n    age = int(texte)\n    print(\"Dans 10 ans, tu auras\", age + 10, \"ans\")\n    print(\"Texte collé :\", texte + \"10\")\n    print(\"17 // 5 =\", 17 // 5, \"et 17 % 5 =\", 17 % 5)\n\n\ndemander_age()\n"
+   }
+  }
+ },
+ "rewards": [],
+ "created": 1795531530.9279027,
+ "stats": {
+  "runs": 16,
+  "errors": {
+   "SyntaxError": 1,
+   "ValueError": 1
+  },
+  "fixed": 1,
+  "first_try": 2,
+  "stubborn": 0,
+  "steps": 0,
+  "spots": 0,
+  "tour_done": false,
+  "night": false,
+  "days": [
+   "2026-11-24"
+  ],
+  "time": {
+   "a1l1": 390,
+   "r1l1": 300,
+   "a1l3": 180
+  },
+  "broken": {
+   "a1l3": true
+  }
+ },
+ "achievements": {
+  "first_run": 1795531542.2684765,
+  "first_bug": 1795531881.8294928,
+  "first_try": 1795531921.2492194
+ }
+}

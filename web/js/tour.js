@@ -10,7 +10,7 @@ const STEPS = [
   { target: "#console", title: "5. La console", text: "Ce que ton programme affiche. En cas d'erreur, des questions t'aident à trouver la cause, sans te donner la solution." },
   { target: "#right .tabs", title: "6. Leçon, inspecteur, diagramme", text: "La leçon te guide en 7 étapes. L'inspecteur montre les attributs d'un objet (clique sur un objet du monde). Le diagramme dessine tes classes." },
   { target: "#topbar nav", title: "7. Carte et progression", text: "La carte du monde montre les niveaux. Progression : ton XP, tes statistiques et des succès cachés à débloquer." },
-  { target: "#btn-sound", title: "8. Les sons", text: "Coupe ou remets les sons ici. C'est fini, bon jeu !", click: true },
+  { target: "#btn-sound", title: "8. Le son", text: "Règle ici le volume des effets, des voix des personnages et de la musique (différente dans chaque région). C'est fini, bon jeu !" },
 ];
 
 export class Tour {
