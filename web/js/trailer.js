@@ -13,9 +13,12 @@
 // Along the bottom, the path of the journey: the 13 worlds, act by act,
 // leading to the Heart. Nothing of the story or of the exercises is told.
 //
-// It runs on the cinematic engine: the player can pause it, go back to the
-// previous shot or on to the next one (⏮ ⏸ ⏭), but not jump to the end.
-// Watched again later (🎬 button), it can be closed.
+// It plays at every launch of the game. The first time, the start card
+// invites to discover PyCraft and the trailer cannot be closed; afterwards
+// the card welcomes the player back, shows where his game stands, and the
+// trailer can be closed at any moment (✕). It runs on the cinematic engine:
+// the player can pause it, go back to the previous shot or on to the next
+// one (⏮ ⏸ ⏭).
 import { Cinematic } from "./cinematic.js";
 import { HEART, heartPulse, setHeart } from "./coeur.js";
 import { heartSequence } from "./finale.js";
@@ -169,13 +172,15 @@ export class Trailer {
   // The state of the path at the beginning of a shot.
   // mode: travel (world i), calling (the Heart calls, still unknown),
   // reveal (the Heart is shown), start (the end: you are at the beginning).
+  // start: the end of the trailer — world i is where the player is.
   setPath(i, mode = "travel") {
     const last = this.nodes.length - 1;
     this.nodes.forEach((node, j) => {
       node.className = node.className.replace(/ ?(seen|now|calling|revealed|locked|first)/g, "");
       if (mode === "start") {
-        if (j === 0) node.classList.add("now", "first");
-        if (j === last) node.classList.add("revealed", "locked");
+        if (j < i) node.classList.add("seen");
+        if (j === i && j !== last) node.classList.add("now");
+        if (j === last) node.classList.add("revealed");
         return;
       }
       if (j < i) node.classList.add("seen");
@@ -183,19 +188,20 @@ export class Trailer {
       if (j === last && mode === "calling") node.classList.add("calling");
       if (j === last && mode === "reveal") node.classList.add("revealed");
     });
-    const at = mode === "start" ? 0 : Math.min(i, last);
+    const at = Math.min(i, last);
     const node = this.nodes[at];
     const box = this.track.getBoundingClientRect();
     const r = node.getBoundingClientRect();
     this.track.style.setProperty("--fill", `${Math.max(0, r.left + r.width / 2 - box.left - 6)}px`);
     this.track.classList.toggle("done", mode === "calling" || mode === "reveal");
     this.here.classList.toggle("show", mode === "start");
-    const first = this.nodes[0].getBoundingClientRect();
-    this.here.style.left = `${first.left + first.width / 2 - box.left}px`;
+    const here = node.getBoundingClientRect();
+    this.here.style.left = `${here.left + here.width / 2 - box.left}px`;
     const heart = this.nodes[last].getBoundingClientRect();
     this.goal.style.left = `${heart.left + heart.width / 2 - box.left}px`;
-    this.goal.textContent = mode === "start" ? "🔒 Le Cœur du Monde" : mode === "reveal" ? "Le Cœur du Monde" : mode === "calling" ? "?" : "";
-    this.goal.classList.toggle("show", ["start", "reveal", "calling"].includes(mode));
+    const locked = mode === "start" && at < last;
+    this.goal.textContent = locked ? "🔒 Le Cœur du Monde" : mode === "reveal" || mode === "start" ? "Le Cœur du Monde" : mode === "calling" ? "?" : "";
+    this.goal.classList.toggle("show", ["start", "reveal", "calling"].includes(mode) && !(mode === "start" && at === last));
   }
 
   show(node, text) {
@@ -221,17 +227,47 @@ export class Trailer {
     this.show(this.worldName, text);
   }
 
-  // The click on the start card is also what allows the browser to play
-  // sound.
-  startCard() {
+  // The index of the world (on the path) of a level.
+  worldIndex(levelId) {
+    const regions = this.app.curriculum.regions;
+    const i = regions.findIndex((r) => r.levels.some((l) => l.id === levelId));
+    return Math.max(0, i);
+  }
+
+  // The start card. Its click is also what allows the browser to play
+  // sound. The first time: discover PyCraft. Afterwards: welcome back, the
+  // state of the game, and resume it.
+  startCard(first) {
     return new Promise((resolve) => {
-      const card = el("div", { class: "tr-start" },
+      const go = el("button", { class: "mc-btn primary big", onclick: () => { card.remove(); resolve(); } },
+        first ? "▶ Découvrir PyCraft" : "▶ Reprendre l'aventure");
+      const card = el("div", { class: `tr-start ${first ? "" : "back"}` },
         el("img", { src: "/img/logo.svg", alt: "PyCraft", width: "420" }),
-        el("p", {}, "Bienvenue ! Petit aperçu du voyage qui t'attend."),
-        el("button", { class: "mc-btn primary big", onclick: () => { card.remove(); resolve(); } }, "▶ Découvrir PyCraft"),
-        el("p", { class: "small muted" }, "Pense à monter le son 🔊 · ⏸ pause · ⏮ ⏭ pour revoir ou avancer"));
+        ...(first
+          ? [el("p", {}, "Bienvenue ! Petit aperçu du voyage qui t'attend."), go,
+            el("p", { class: "small muted" }, "Pense à monter le son 🔊 · ⏸ pause · ⏮ ⏭ pour revoir ou avancer")]
+          : [el("p", { class: "tr-back" }, "Bon retour, aventurier !"), this.saveCard(), go,
+            el("p", { class: "small muted" }, "Le voyage défile d'abord · ✕ pour le passer à tout moment · ⏸ ⏮ ⏭")]));
       this.root.append(card);
+      go.focus();
     });
+  }
+
+  // Where the game of the player stands: his level, his world, his
+  // progress on the whole journey.
+  saveCard() {
+    const { app } = this;
+    const level = app.level;
+    const region = app.regionOf[level.id];
+    const order = app.curriculum.order;
+    const done = order.filter((id) => ["completed", "mastered"].includes((app.progress.levels[id] || {}).status)).length;
+    return el("div", { class: "tr-save" },
+      el("div", { class: "tr-save-head" }, "💾 Ta partie"),
+      el("div", { class: "tr-save-level" }, `Niveau ${level.number} · ${level.title}`),
+      el("div", { class: "tr-save-region" }, `${region.name} · Acte ${ROMAN[region.act] || region.act} · ${app.progress.xp} XP`),
+      el("div", { class: "tr-save-bar", title: `${done} niveaux terminés sur ${order.length}` },
+        el("span", { style: `width:${(100 * done) / order.length}%` })),
+      el("div", { class: "tr-save-count" }, `${done} / ${order.length} niveaux terminés · le Cœur du Monde t'attend au bout`));
   }
 
   // ----- places
@@ -398,6 +434,7 @@ export class Trailer {
       dur: 5200,
       enter: () => {
         this.enterHeart(false);
+        this.label("");
         this.show(this.title, "");
         this.show(this.sub, "");
         this.setPath(last, "reveal");
@@ -422,12 +459,15 @@ export class Trailer {
       dur: 3600,
       enter: () => {
         this.enterHeart(false);
-        this.setPath(0, "start");
+        this.label("");
+        const here = this.first ? 0 : this.worldIndex(this.app.level.id);
+        this.setPath(here, "start");
         setHeart(world, { awake: 1, seals: 4, beat: 1000 });
         world.fadeIn(500);
         world.shot({ at: [5, 5, 3], zoom: 0.62 }, { at: [8, 8, 2.4], zoom: 0.56 }, 3600);
         this.show(this.title, "À toi de jouer !");
-        this.show(this.sub, "Ton aventure commence dans la prairie.");
+        this.show(this.sub, this.first ? "Ton aventure commence dans la prairie."
+          : `Ton aventure reprend : ${this.app.regionOf[this.app.level.id].name}.`);
         sound.play("achievement");
       },
       cues: [[1100, () => this.fireworks()]],
@@ -435,9 +475,12 @@ export class Trailer {
     return steps;
   }
 
-  play({ first = false } = {}) {
+  // first: the very first launch. launch: played when the game starts (a
+  // start card first); otherwise asked with the 🎬 button (no card).
+  play({ first = false, launch = false } = {}) {
     const { app } = this;
     const { world } = app;
+    this.first = first;
     return new Promise((resolve) => {
       this.build();
       document.body.classList.add("trailer-on");
@@ -461,7 +504,8 @@ export class Trailer {
         }
         resolve();
       };
-      this.startCard().then(() => {
+      const gate = first || launch ? this.startCard(first) : Promise.resolve();
+      gate.then(() => {
         sound.unlock();
         world.trailerActive = true;
         this.cine = new Cinematic(world, {

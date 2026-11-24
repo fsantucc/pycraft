@@ -143,7 +143,11 @@ ni événement joué deux fois. La pause fige vraiment le monde (animations, bul
 sons). Une cinématique attend aussi, en pause, quand une fenêtre ou la visite guidée la
 recouvre.
 
-**Aperçu (premier lancement)** : le voyage vers le Cœur du Monde, en trois phases.
+**Aperçu (à chaque lancement)** : le voyage vers le Cœur du Monde, en trois phases. La
+première fois, la carte de départ propose « Découvrir PyCraft » et l'aperçu ne peut pas
+être fermé. Ensuite, elle accueille le joueur (« Bon retour, aventurier ! »), montre sa
+partie (niveau, monde, XP, niveaux terminés) et propose « Reprendre l'aventure » ; l'aperçu
+se ferme alors à tout moment avec ✕, et la partie reprend là où elle en était.
 
 1. *Le voyage* (actes I, II et III) : une seule image par monde, comme un souvenir
    fugace (flash de lumière chaude, flou qui se dissipe, caméra qui glisse), de plus en
@@ -155,9 +159,10 @@ recouvre.
    « Mais seras-tu capable d'atteindre Le Cœur du Monde ? ».
 
 En bas de l'écran, le chemin du voyage montre les 13 mondes acte par acte jusqu'au Cœur ;
-à la fin, il indique « Tu es ici » sur la Prairie et le Cœur verrouillé 🔒 au bout. Rien de
-l'histoire ni des exercices n'est dévoilé. On peut avancer étape par étape, pas quitter ;
-le bouton 🎬 la rejoue (et là, ✕ la ferme).
+à la fin, il indique « Tu es ici » sur le monde où en est le joueur et le Cœur verrouillé
+🔒 au bout. Rien de
+l'histoire ni des exercices n'est dévoilé. Le bouton 🎬 la rejoue pendant la partie.
+(Pour les tests automatiques, `?intro=0` dans l'adresse saute l'aperçu.)
 
 **Cinématique d'histoire** : la première fois qu'on ouvre un niveau, les personnages
 racontent l'histoire ; tant qu'ils n'ont pas fini, « Comprendre → » et les autres étapes

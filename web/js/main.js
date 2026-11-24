@@ -8,7 +8,7 @@ import { storyCinematic } from "./cinematic.js";
 import { heartPulse, heartWave, sealInfo, setHeart } from "./coeur.js";
 import { finaleCinematic } from "./finale.js";
 import { Tour } from "./tour.js";
-import { TRAILER_KEY, TRAILER_VERSION, Trailer } from "./trailer.js";
+import { TRAILER_KEY, Trailer } from "./trailer.js";
 import { TraceModel, describe } from "./trace.js";
 import { api, el, esc, md, pushToast, showValue, toast } from "./util.js";
 import { World } from "./world.js";
@@ -85,16 +85,19 @@ class App {
     this.watchCovers();
     await this.openLevel(target);
     this.startTracking();
-    // The very first time: the trailer of the whole game (it cannot be
-    // skipped, only played faster), then the level starts for real.
-    let seen = true;
+    // At every launch: the trailer of the game, then the level starts for
+    // real. The first time it cannot be closed; a returning player is
+    // welcomed back (his game, his progress) and can close it (✕).
+    // ?intro=0 in the address skips it (automated tests).
+    let returning = false;
     try {
-      seen = localStorage.getItem(TRAILER_KEY) === TRAILER_VERSION;
+      returning = !!localStorage.getItem(TRAILER_KEY);
     } catch {
-      seen = true;
+      returning = true;
     }
-    if (!seen) {
-      await this.playTrailer(true);
+    returning = returning || this.progress.xp > 0;
+    if (new URLSearchParams(location.search).get("intro") !== "0") {
+      await this.playTrailer(!returning, true);
     }
     if (!localStorage.getItem("pycraft.welcomed")) {
       localStorage.setItem("pycraft.welcomed", "1");
@@ -102,13 +105,13 @@ class App {
     }
   }
 
-  async playTrailer(first = false) {
+  async playTrailer(first = false, launch = false) {
     if (this.trailerPlaying) return;
     this.trailerPlaying = true;
     $("overlay").classList.add("hidden");
     try {
       this.trailer = new Trailer(this);
-      await this.trailer.play({ first });
+      await this.trailer.play({ first, launch });
     } finally {
       this.trailerPlaying = false;
       await this.openLevel(this.level.id);
@@ -342,6 +345,8 @@ class App {
     }));
     window.addEventListener("keydown", (e) => {
       if (this.world.cinematic || document.body.classList.contains("trailer-on")) {
+        // The start card of the trailer: Enter or Space press its button.
+        if (document.activeElement && document.activeElement.closest(".tr-start")) return;
         // A cinematic handles its own keys (← ⏸ →); nothing else meanwhile.
         if (["Escape", " ", "F5", "F10", "Enter"].includes(e.key)) e.preventDefault();
         return;

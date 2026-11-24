@@ -187,7 +187,7 @@ def test_browser_smoke(server_url: str) -> None:
         page.add_init_script(
             "localStorage.setItem('pycraft.trailerSeen', '6')")
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.goto(server_url)
+        page.goto(server_url + "?intro=0")
         page.wait_for_timeout(1500)
         assert page.locator("#overlay").is_visible()  # welcome screen
         page.evaluate("document.getElementById('overlay')"
@@ -276,7 +276,7 @@ def test_every_sound_renders_cleanly(server_url: str) -> None:
         browser = p.chromium.launch(executable_path=chrome,
                                     args=["--no-sandbox"])
         page = browser.new_page()
-        page.goto(server_url)
+        page.goto(server_url + "?intro=0")
         page.wait_for_timeout(800)
         levels: Any = page.evaluate("""async () => {
             const mod = await import('/js/sound.js');
@@ -409,7 +409,7 @@ def test_cinematic_controls(server_url: str) -> None:
             "localStorage.setItem('pycraft.trailerSeen', '6');"
             "localStorage.setItem('pycraft.welcomed', '1')")
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.goto(server_url)
+        page.goto(server_url + "?intro=0")
         page.wait_for_timeout(1500)
         bubbles = """() => window.pycraft.world.effects
             .filter(f => f.kind === 'bubble' && f.npc).map(f => f.text)"""
@@ -453,7 +453,7 @@ def test_finale_of_the_last_level(server_url: str) -> None:
             "localStorage.setItem('pycraft.trailerSeen', '6');"
             "localStorage.setItem('pycraft.welcomed', '1')")
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.goto(server_url)
+        page.goto(server_url + "?intro=0")
         page.wait_for_timeout(1200)
         page.evaluate(SKIP_CINEMATIC)
         page.evaluate("""async () => {
@@ -491,5 +491,41 @@ def test_finale_of_the_last_level(server_url: str) -> None:
         page.mouse.click(box["x"] + hx, box["y"] + hy)
         page.wait_for_timeout(200)
         assert page.evaluate("window.pycraft.world.heart.pulseAt") > before
+        browser.close()
+    assert not errors, errors
+
+
+def test_returning_player_trailer(server_url: str) -> None:
+    """The trailer plays at every launch: a returning player is welcomed
+    back with his game, and can close it to resume."""
+    playwright = pytest.importorskip("playwright.sync_api")
+    chrome = _browser()
+    if chrome is None:
+        pytest.skip("aucun navigateur Chrome/Chromium")
+    errors: list[str] = []
+    with playwright.sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=chrome,
+                                    args=["--no-sandbox"])
+        page = browser.new_page(viewport={"width": 1300, "height": 800})
+        page.add_init_script(
+            "localStorage.setItem('pycraft.trailerSeen', '6');"
+            "localStorage.setItem('pycraft.welcomed', '1')")
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(server_url)
+        page.wait_for_timeout(1500)
+        card = page.locator(".tr-start")
+        assert card.is_visible()
+        assert "Reprendre l'aventure" in card.inner_text()
+        assert "Découvrir" not in card.inner_text()
+        level: Any = page.evaluate("window.pycraft.level")
+        assert f"Niveau {level['number']}" in card.inner_text()
+        page.keyboard.press("Enter")  # the button has the focus
+        page.wait_for_timeout(900)
+        kind = page.evaluate("window.pycraft.world.cinematic.kind")
+        assert kind == "trailer"
+        page.click(".cine-controls .close")
+        page.wait_for_selector(".trailer", state="detached", timeout=5000)
+        page.wait_for_timeout(600)
+        assert page.evaluate("window.pycraft.level.id") == level["id"]
         browser.close()
     assert not errors, errors
