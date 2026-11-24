@@ -460,8 +460,12 @@ body.trailer-on #world-hud, body.trailer-on .world-banner, body.trailer-on #tool
 .tr-start p { max-width: 640px; font-size: 18px; line-height: 1.5; margin: 0; }
 .tr-start .small { font-size: 13px; }
 .mc-btn.big { font-size: 20px; padding: 12px 26px; }
-.tr-map { position: absolute; top: 9%; left: 50%; transform: translateX(-50%); color: #fff3d0; font-weight: 800;
-  font-size: clamp(18px, 2.2vw, 30px); letter-spacing: 3px; text-transform: uppercase; text-shadow: 0 3px 0 #000, 0 0 20px #000;
-  opacity: 0; white-space: nowrap; }
-.tr-map.show { animation: tr-map 2.4s ease-out forwards; }
-@keyframes tr-map { 0% { opacity: 0; letter-spacing: 12px; } 25% { opacity: 1; letter-spacing: 3px; } 80% { opacity: 1; } 100% { opacity: .0; } }
+.tr-map { position: absolute; top: 9%; left: 50%; transform: translate(-50%, -10px); text-align: center; opacity: 0;
+  background: #000b; border: 2px solid #f2c14e88; border-radius: 10px; padding: 10px 22px 12px; max-width: 80%;
+  box-shadow: 0 8px 30px #000a; transition: opacity .35s, transform .35s; }
+.tr-map.show { opacity: 1; transform: translate(-50%, 0); }
+.tr-map-name { color: #fff3d0; font-weight: 900; font-size: clamp(18px, 2.2vw, 30px); letter-spacing: 2px; text-transform: uppercase;
+  text-shadow: 0 3px 0 #000; white-space: nowrap; }
+.tr-map-level { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.tr-learn { color: #e6ffc8; font-size: clamp(14px, 1.4vw, 19px); margin-top: 6px; }
+.tr-learn b { color: #b8f36b; }

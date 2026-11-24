@@ -128,8 +128,9 @@ synthétisé par le navigateur, aucun fichier audio :
 
 **Visite guidée** : proposée au premier lancement, rejouable avec le bouton **?**.
 
-**Aperçu (premier lancement)** : une bande-annonce rapide (~25 s) qui montre les maps,
-leurs personnages et leurs créatures, quelques attaques et quelques réalisations, sans
+**Aperçu (premier lancement)** : une bande-annonce rapide (~35 s) qui montre les maps,
+leurs personnages et leurs créatures, quelques attaques et quelques réalisations ; pour
+chaque niveau affiché, une carte indique la région, le niveau et ce qu'on y apprend, sans
 rien dévoiler de l'histoire ni des exercices. Elle ne peut pas être passée. Le bouton 🎬
 la rejoue (et là, on peut la quitter).
 

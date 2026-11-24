@@ -185,7 +185,7 @@ def test_browser_smoke(server_url: str) -> None:
         page = browser.new_page(viewport={"width": 1500, "height": 880})
         # The trailer of the first launch is tested on its own below.
         page.add_init_script(
-            "localStorage.setItem('pycraft.trailerSeen', '1')")
+            "localStorage.setItem('pycraft.trailerSeen', '3')")
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(server_url)
         page.wait_for_timeout(1500)
@@ -330,12 +330,15 @@ def test_first_launch_trailer_cannot_be_skipped(server_url: str) -> None:
         page.keyboard.press("Escape")
         assert page.locator(".trailer").count() == 1  # not skipped
         page.wait_for_timeout(2500)
-        # The maps show their characters and creatures.
+        # The maps show their characters and creatures, and each level shown
+        # says what is learned there.
         assert page.evaluate("window.pycraft.world.stage.npcs.length") > 0
+        assert "Tu y apprends" in page.locator(".tr-learn").inner_text()
+        assert "Niveau" in page.locator(".tr-map-level").inner_text()
         page.evaluate("window.pycraft.trailer.rate = 8")
         page.wait_for_selector(".trailer", state="detached", timeout=90000)
         assert page.evaluate(
-            "localStorage.getItem('pycraft.trailerSeen')") == "1"
+            "localStorage.getItem('pycraft.trailerSeen')") == "3"
         page.wait_for_timeout(800)
         # Then the story of the first level: locked until it is told.
         info: Any = page.evaluate("window.pycraft.world.cineInfo()")

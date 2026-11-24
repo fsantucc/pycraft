@@ -8,16 +8,23 @@
 import { sound } from "./sound.js";
 import { el } from "./util.js";
 
+// Raised each time the trailer changes: a player who saw an older version
+// sees the new one once, at the next launch.
+export const TRAILER_VERSION = "3";
+export const TRAILER_KEY = "pycraft.trailerSeen";
+const MIN_SHOT = 3000; // ms: the shortest shot, to read the card
+
 // One shot = a map (theme + the characters of one of its scenes), some
 // creatures, and what happens: attacks, achievements. Times are in ms.
+// learn: what the player learns in the level shown (displayed on screen).
 const SHOTS = [
-  { level: "a1l1", map: "PyCraft", title: true, hold: 2600,
+  { level: "a1l1", map: "PyCraft", learn: "créer et appeler tes premières fonctions, afficher avec print()", title: true, hold: 2600,
     mobs: [{ id: "c1", model: "Cow", s: 21, d: 6, scale: 1.3 }, { id: "s1", model: "Sheep", s: 23.5, d: 8.5, scale: 1.3 }, { id: "p1", model: "Chicken", s: 19, d: 9, scale: 0.91 }],
     play: async (t) => { await t.wait(600); t.cheer(); } },
-  { level: "a1l3", map: "La Prairie", hold: 1500,
+  { level: "a1l3", map: "La Prairie", learn: "poser des questions avec input(), convertir avec int(), calculer", hold: 1500,
     mobs: [{ id: "h1", model: "Horse", s: 21, d: 7, scale: 1.3 }],
     play: async (t) => { await t.wait(500); t.achieve(); } },
-  { level: "a2l1", map: "Les Mines", hold: 1200,
+  { level: "a2l1", map: "Les Mines", learn: "répéter des actions avec les boucles for et while", hold: 1200,
     mobs: [{ id: "z1", model: "Zombie", s: 20.5, d: 7.5, scale: 1.3 }, { id: "sp", model: "Spider", s: 23, d: 9, scale: 1.3 }],
     play: async (t) => {
       await t.wait(500);
@@ -31,10 +38,10 @@ const SHOTS = [
       await t.wait(300);
       t.kill("sp");
     } },
-  { level: "r2l1", map: "L'Atelier", hold: 1300,
+  { level: "r2l1", map: "L'Atelier", learn: "créer des classes et des objets, chacun avec ses attributs", hold: 1300,
     mobs: [{ id: "pg", model: "Pig", s: 21, d: 6.5, scale: 1.3 }, { id: "bee", model: "Bee", s: 23, d: 9, scale: 1.04 }],
     play: async (t) => { await t.wait(600); t.achieve(); } },
-  { level: "r3l2", map: "La Citadelle", hold: 1300,
+  { level: "r3l2", map: "La Citadelle", learn: "protéger les données d'un objet : setters et validation", hold: 1300,
     mobs: [{ id: "g", model: "Golem", s: 21.5, d: 7.5, scale: 1.56 }],
     play: async (t) => {
       await t.wait(450);
@@ -45,7 +52,7 @@ const SHOTS = [
       t.kill("g");
       t.achieve();
     } },
-  { level: "r4l1", map: "La Forge", hold: 1300,
+  { level: "r4l1", map: "La Forge", learn: "l'héritage : des familles de classes parent / enfant", hold: 1300,
     mobs: [{ id: "w", model: "Wither", s: 21.5, d: 7.5, scale: 1.56 }],
     play: async (t) => {
       await t.wait(400);
@@ -56,7 +63,7 @@ const SHOTS = [
       t.boom("w");
       t.kill("w");
     } },
-  { level: "r5l2", map: "Le Laboratoire", hold: 1300,
+  { level: "r5l2", map: "Le Laboratoire", learn: "les @classmethod : d'autres façons de fabriquer un objet", hold: 1300,
     mobs: [{ id: "sl", model: "Slime", s: 21, d: 7, scale: 1.3 }, { id: "bt", model: "Bat", s: 23, d: 9, scale: 0.91 }],
     play: async (t) => {
       await t.wait(500);
@@ -66,7 +73,7 @@ const SHOTS = [
       t.kill("sl");
       t.achieve();
     } },
-  { level: "r6l4", map: "La Tour", hold: 1400,
+  { level: "r6l4", map: "La Tour", learn: "le polymorphisme et des objets qui interagissent entre eux", hold: 1400,
     mobs: [{ id: "d", model: "Dragon", s: 21, d: 7, scale: 1.43 }],
     play: async (t) => {
       await t.wait(450);
@@ -81,7 +88,7 @@ const SHOTS = [
       await t.wait(200);
       t.cheer();
     } },
-  { level: "x1l6", map: "Les Terres Instables", hold: 1400,
+  { level: "x1l6", map: "Les Terres Instables", learn: "les exceptions : try, except, raise et finally", hold: 1400,
     mobs: [{ id: "cr", model: "Creeper", s: 21, d: 7.5, scale: 1.3 }, { id: "en", model: "Enderman", s: 23.5, d: 9.5, scale: 1.3 }],
     play: async (t) => {
       await t.wait(600);
@@ -93,10 +100,10 @@ const SHOTS = [
       t.kill("en");
       t.achieve();
     } },
-  { level: "k1l2", map: "La Bibliothèque", hold: 1300,
+  { level: "k1l2", map: "La Bibliothèque", learn: "les listes : index, tri, sum, min et max", hold: 1300,
     mobs: [{ id: "ca", model: "Cat", s: 21, d: 7, scale: 1.04 }, { id: "wo", model: "Wolf", s: 23, d: 8.5, scale: 1.3 }],
     play: async (t) => { await t.wait(500); t.achieve(); } },
-  { level: "k3l1", map: "Le Royaume", final: true, hold: 3400,
+  { level: "k3l1", map: "Le Royaume", learn: "tout réunir dans un seul vrai programme", final: true, hold: 3400,
     mobs: [{ id: "hr", model: "Horse", s: 21, d: 7, scale: 1.3 }, { id: "sh", model: "Sheep", s: 23, d: 9, scale: 1.3 }],
     play: async (t) => {
       await t.wait(400);
@@ -184,10 +191,13 @@ export class Trailer {
     this.bar = el("span");
     this.title = el("div", { class: "tr-title" });
     this.sub = el("div", { class: "tr-sub" });
-    this.mapName = el("div", { class: "tr-map" });
+    this.mapName = el("div", { class: "tr-map-name" });
+    this.mapLevel = el("div", { class: "tr-map-level" });
+    this.mapLearn = el("div", { class: "tr-learn" });
+    this.mapCard = el("div", { class: "tr-map" }, this.mapName, this.mapLevel, this.mapLearn);
     this.root = el("div", { class: "trailer" },
       el("div", { class: "tr-caption" }, this.title, this.sub),
-      this.mapName,
+      this.mapCard,
       el("div", { class: "tr-controls" },
         el("span", { class: "tr-label" }, "🎬 Aperçu de PyCraft"),
         el("span", { class: "tr-bar" }, this.bar),
@@ -238,7 +248,7 @@ export class Trailer {
     document.body.classList.remove("trailer-on");
     this.root.remove();
     try {
-      localStorage.setItem("pycraft.trailerSeen", "1");
+      localStorage.setItem(TRAILER_KEY, TRAILER_VERSION);
     } catch {
       // storage unavailable
     }
@@ -256,22 +266,42 @@ export class Trailer {
     world.setStage(level.scene, false);
     world.setMobs(shot.mobs || []);
     world.focusUntil = Infinity;
+    // The map, the level, and what is learned there.
+    this.card(region.name, `Niveau ${level.number} · ${level.title}`, shot.learn || this.notionsOf(level));
     if (shot.title) {
       this.show(this.title, "PyCraft");
       this.show(this.sub, "Apprends Python en construisant un monde.");
-      this.show(this.mapName, "");
       sound.play("bell");
     } else if (shot.final) {
-      this.show(this.mapName, shot.map);
       this.show(this.title, "À toi de jouer !");
       this.show(this.sub, "Ton aventure commence dans la prairie.");
     } else {
       this.show(this.title, "");
       this.show(this.sub, "");
-      this.show(this.mapName, shot.map);
       sound.play("whoosh");
     }
+    const start = performance.now();
     if (shot.play) await shot.play(this);
     await this.wait((shot.hold || 1200) * 0.8);
+    // Enough time to read what is learned there.
+    const left = MIN_SHOT - (performance.now() - start) * this.rate;
+    if (left > 0) await this.wait(left);
+    this.mapCard.classList.remove("show");
+  }
+
+  card(name, levelLine, learn) {
+    this.mapCard.classList.remove("show");
+    void this.mapCard.offsetWidth;
+    this.mapName.textContent = name;
+    this.mapLevel.textContent = levelLine;
+    this.mapLearn.innerHTML = "";
+    this.mapLearn.append(el("b", {}, "📘 Tu y apprends : "), learn);
+    this.mapCard.classList.add("show");
+  }
+
+  // Fallback: the first notions of the level.
+  notionsOf(level) {
+    const names = this.app.curriculum.notions || {};
+    return level.notions.slice(0, 3).map((n) => names[n] || n).join(", ");
   }
 }

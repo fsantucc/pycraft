@@ -5,7 +5,7 @@ import { Inspector } from "./inspector.js";
 import { LessonPanel, STEPS } from "./lesson.js";
 import { sound } from "./sound.js";
 import { Tour } from "./tour.js";
-import { Trailer } from "./trailer.js";
+import { TRAILER_KEY, TRAILER_VERSION, Trailer } from "./trailer.js";
 import { TraceModel, describe } from "./trace.js";
 import { api, el, esc, md, pushToast, showValue, toast } from "./util.js";
 import { World } from "./world.js";
@@ -86,7 +86,7 @@ class App {
     // skipped, only played faster), then the level starts for real.
     let seen = true;
     try {
-      seen = localStorage.getItem("pycraft.trailerSeen") === "1";
+      seen = localStorage.getItem(TRAILER_KEY) === TRAILER_VERSION;
     } catch {
       seen = true;
     }
