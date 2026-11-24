@@ -4,6 +4,9 @@ import { Editor } from "./editor.js";
 import { Inspector } from "./inspector.js";
 import { LessonPanel, STEPS } from "./lesson.js";
 import { sound } from "./sound.js";
+import { storyCinematic } from "./cinematic.js";
+import { heartPulse, heartWave, sealInfo, setHeart } from "./coeur.js";
+import { finaleCinematic } from "./finale.js";
 import { Tour } from "./tour.js";
 import { TRAILER_KEY, TRAILER_VERSION, Trailer } from "./trailer.js";
 import { TraceModel, describe } from "./trace.js";
@@ -56,7 +59,6 @@ class App {
       onHover: (target, e) => this.hover(target, e),
     });
     this.inspector = new Inspector($("tab-inspector"), { onSelect: (t) => this.select(t) });
-    this.world.onCinematic = (info) => this.lesson.onCinematic(info);
     this.lesson = new LessonPanel($("tab-lesson"), this);
     this.bindUi();
   }
@@ -80,6 +82,7 @@ class App {
     }) || this.curriculum.order[0];
     const target = remembered && this.progress.levels[remembered] && this.progress.levels[remembered].status !== "locked"
       ? remembered : firstOpen;
+    this.watchCovers();
     await this.openLevel(target);
     this.startTracking();
     // The very first time: the trailer of the whole game (it cannot be
@@ -338,8 +341,8 @@ class App {
       this.renderSide();
     }));
     window.addEventListener("keydown", (e) => {
-      if (document.body.classList.contains("trailer-on")) {
-        // During the trailer the keyboard does nothing (no skipping).
+      if (this.world.cinematic || document.body.classList.contains("trailer-on")) {
+        // A cinematic handles its own keys (← ⏸ →); nothing else meanwhile.
         if (["Escape", " ", "F5", "F10", "Enter"].includes(e.key)) e.preventDefault();
         return;
       }
@@ -372,6 +375,7 @@ class App {
     }
     await this.flushSave();
     $("overlay").classList.add("hidden");
+    if (this.world.cinematic && !this.trailerPlaying) this.world.cinematic.stop();
     this.pause();
     this.mode = null;
     this.model = null;
@@ -382,6 +386,10 @@ class App {
     this.world.hideBoss();
     // The characters and scenery of the story, and the story told by them.
     this.world.setStage(this.level.scene, !!this.progress.levels[levelId].mission_passed);
+    if (this.world.theme.coeur) {
+      // The Heart of the World: awake once the last mission is done.
+      setHeart(this.world, this.progress.levels[levelId].mission_passed ? { awake: 2, seals: 4, beat: 1000 } : { awake: 1, seals: 0, beat: 1300 });
+    }
     this.introPlayedFor = null;
     this.lesson.reset();
     $("where").textContent = `${this.region.name} — ${this.level.number} ${this.level.title}`;
@@ -409,14 +417,38 @@ class App {
     return starter && Object.keys(starter).length ? { ...starter } : { "main.py": "" };
   }
 
+  // The cinematic of the story of the current level: the characters talk
+  // (or, for the last level, the finale).
+  playStory({ blocking = false, onEnd = null } = {}) {
+    const scene = this.level && this.level.scene;
+    if (!scene || !scene.intro || !scene.intro.length || !this.world.stage) return false;
+    const passed = !!(this.progress.levels[this.level.id] || {}).mission_passed;
+    const options = { blocking, onEnd, passed, onChange: (info) => this.lesson.onCinematic(info) };
+    const cine = scene.cinematic === "finale"
+      ? finaleCinematic(this.world, scene, options)
+      : storyCinematic(this.world, scene, options);
+    this.pause();
+    cine.start();
+    // Started under a window (the welcome, the map…): it waits for it.
+    if (!$("overlay").classList.contains("hidden")) cine.hold("overlay", true);
+    if (this.tour && this.tour.root) cine.hold("tour", true);
+    return true;
+  }
+
+  replayStory() {
+    if (this.world.cinematic) return;
+    this.clearRun();
+    this.playStory({ onEnd: () => { if (this.step === "story") this.runDemo(true); } });
+  }
+
   nextLevelId(levelId) {
     const order = this.curriculum.order;
     return order[order.indexOf(levelId) + 1] || null;
   }
 
   async goStep(step) {
-    if (step !== "story" && this.world.cine && this.world.cine.blocking) {
-      toast("Écoute d'abord l'histoire jusqu'au bout. Tu peux l'accélérer avec ⏩.", "");
+    if (step !== "story" && this.world.cinematic && this.world.cinematic.blocking) {
+      toast("Regarde d'abord la scène jusqu'au bout : ⏭ (ou →) pour avancer étape par étape.", "");
       return;
     }
     this.step = step;
@@ -431,7 +463,7 @@ class App {
       toast(err.message, "bad");
     }
     this.updateTopbar();
-    if (this.level.boss && step === "mission") {
+    if (this.level.boss && step === "mission" && !this.world.theme.coeur) {
       this.world.showBoss(this.level.title.replace(/^Boss : /, ""), BOSS_MODELS[this.region.id] || "Zombie", this.level.checks.length);
     } else {
       this.world.hideBoss();
@@ -440,15 +472,15 @@ class App {
     document.querySelector('.tab[data-tab="lesson"]').click();
     if (step === "story") {
       // First the characters tell the story (a cinematic), then the
-      // demonstration plays. The first time, the cinematic cannot be skipped:
-      // it can only be played faster.
+      // demonstration plays. The first time, the lesson waits for the end of
+      // the cinematic (which can be paused, rewound or advanced step by step).
       const levelId = this.level.id;
       if (this.introPlayedFor !== levelId) {
         this.introPlayedFor = levelId;
         const st = this.progress.levels[levelId] || {};
         const firstTime = !(st.steps_seen || []).includes("explain") && !["completed", "mastered"].includes(st.status);
         this.clearRun();
-        const playing = this.world.playIntro({
+        const playing = this.playStory({
           blocking: firstTime,
           onEnd: () => {
             if (this.step === "story" && this.level.id === levelId) {
@@ -770,9 +802,14 @@ class App {
   }
 
   select(target) {
+    if (target && (target.kind === "heart" || target.kind === "seal")) {
+      heartPulse(this.world);
+      sound.play(target.kind === "heart" ? "heartbeat" : "chime", { note: 72 + (target.id || 0) * 4 });
+      return;
+    }
     if (target && target.kind === "npc") {
       // Clicking a character of the story: he tells his story again.
-      if (!this.world.cine) this.world.playIntro();
+      if (!this.world.cinematic) this.replayStory();
       return;
     }
     this.selected = target;
@@ -783,12 +820,16 @@ class App {
 
   hover(target, e) {
     const tip = $("tooltip");
-    if (!target || (!this.state && target.kind !== "npc")) {
+    if (!target || (!this.state && !["npc", "heart", "seal"].includes(target.kind))) {
       tip.classList.add("hidden");
       return;
     }
     let html = "";
-    if (target.kind === "npc") {
+    if (target.kind === "heart") {
+      html = "<b>Le Cœur du Monde</b><br><i>Il bat. Clique pour l'écouter.</i>";
+    } else if (target.kind === "seal") {
+      html = `<b>${esc(sealInfo(target.id))}</b><br><i>Un des quatre sceaux du Cœur.</i>`;
+    } else if (target.kind === "npc") {
       const npc = this.world.stageNpc(target.id);
       html = `<b>${esc(npc ? npc.name : "")}</b><br>Personnage de l'histoire.<br><i>Clique pour réécouter ce qu'il dit.</i>`;
     } else if (target.kind === "object") {
@@ -835,7 +876,20 @@ class App {
       this.goto(this.model.count - 1, false);
       const warnings = res.results.filter((r) => !r.ok && r.line).map((r) => ({ file: r.file || "main.py", line: r.line, msg: r.message }));
       this.editor.setMarkers({ ...this.editor.markers, warnings });
-      if (this.level.boss) {
+      if (this.world.theme.coeur) {
+        // The checks light the four seals; success wakes the Heart.
+        const ok = res.results.filter((r) => r.ok).length;
+        const seals = res.passed ? 4 : Math.min(3, Math.floor((4 * ok) / Math.max(1, res.results.length)));
+        setHeart(this.world, res.passed ? { awake: 2, seals: 4, beat: 1000 } : { awake: 1, seals });
+        if (res.passed) {
+          heartWave(this.world);
+          this.world.shakeCamera(10, 700);
+          sound.play("impact");
+        } else {
+          heartPulse(this.world);
+          sound.play("heartbeat");
+        }
+      } else if (this.level.boss) {
         this.world.showBoss(this.level.title.replace(/^Boss : /, ""), BOSS_MODELS[this.region.id] || "Zombie", res.results.length);
         res.results.forEach((r, i) => setTimeout(() => this.world.hitBoss(r.ok), 300 + i * 450));
       }
@@ -953,8 +1007,21 @@ Ta progression est sauvegardée automatiquement.`) },
         onDone: () => { this.sendEvent({ kind: "tour" }); sound.play("victory"); },
         onSound: () => sound.play("click"),
       });
+      this.tour.onStop = () => this.holdCinematic("tour", false);
     }
     this.tour.start();
+    this.holdCinematic("tour", true);
+  }
+
+  // A window or the guided tour covers the world: the cinematic waits.
+  holdCinematic(reason, on) {
+    if (this.world.cinematic) this.world.cinematic.hold(reason, on);
+  }
+
+  watchCovers() {
+    const box = $("overlay");
+    const sync = () => this.holdCinematic("overlay", !box.classList.contains("hidden"));
+    new MutationObserver(sync).observe(box, { attributes: true, attributeFilter: ["class"] });
   }
 
   showMap() {

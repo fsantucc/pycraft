@@ -987,6 +987,6 @@ REGION_SOURCE = Region(
 
 REGION_COEUR = Region(
     id="k3", name="Le Cœur du Monde", subtitle="Grande finale : les quatre actes",
-    theme="royaume", reward="Étoile du Nether — PyCraft terminé !",
+    theme="coeur", reward="Étoile du Nether — PyCraft terminé !",
     levels=[FINAL], act=4, icon="🌟",
 )

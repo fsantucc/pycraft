@@ -152,14 +152,20 @@ export function speechBubble(c, x, y, text, progress, style = {}) {
 
 // Pixel particle system (screen space, anchored to world points).
 export class Particles {
-  constructor() {
+  // clock: the time of the world (it stops when a cinematic is paused).
+  constructor(clock = () => performance.now()) {
+    this.list = [];
+    this.clock = clock;
+  }
+
+  clear() {
     this.list = [];
   }
 
   burst(at, { count = 16, color = "#fff", colors = null, speed = 60, up = 30, gravity = 90,
     life = 900, size = 4, spread = Math.PI * 2, angle = -Math.PI / 2, glow = false } = {}) {
     const [x, y] = at();
-    const now = performance.now();
+    const now = this.clock();
     for (let i = 0; i < count; i += 1) {
       const a = angle + (Math.random() - 0.5) * spread;
       const v = speed * (0.4 + Math.random() * 0.8);
@@ -173,11 +179,11 @@ export class Particles {
   }
 
   ambient(p) {
-    this.list.push({ ...p, t0: performance.now() });
+    this.list.push({ ...p, t0: this.clock() });
   }
 
   draw(c, dt) {
-    const now = performance.now();
+    const now = this.clock();
     this.list = this.list.filter((p) => now - p.t0 < p.life);
     for (const p of this.list) {
       p.vy += p.g * dt;

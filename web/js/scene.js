@@ -41,6 +41,7 @@ export const SKINS = {
   explorer: { icon: "🤠", skin: "#d4a373", hair: "#8a5a2a", shirt: "#8a7a4a", pants: "#4a3a2a", shoes: "#2a1a0e", hat: { type: "safari", c: "#c9a86a" }, item: "map" },
   player: { icon: "🎮", skin: "#c8946a", hair: "#2a2a2a", shirt: "#7a4ac4", pants: "#3a3a3a", shoes: "#e8e8e8", hat: { type: "headband", c: "#f2c14e" }, item: "none" },
   runner: { icon: "🏃", skin: "#e0b088", hair: "#e8c050", shirt: "#e5534b", pants: "#2a2a2a", shoes: "#f4f4f4", hat: { type: "headband", c: "#f4f4f4" }, item: "none" },
+  warden: { icon: "🛡", skin: "#c99a6c", hair: "#d8d0c0", beard: "#e8e0d0", shirt: "#e8e0c8", pants: "#3a2f52", shoes: "#2a2238", robe: true, cape: "#7a4ae8", armor: "#d9a640", hat: { type: "hood", c: "#d9a640" }, item: "staff" },
   cook: { icon: "🧑‍🍳", skin: "#d9a57a", hair: "#3a2a1a", shirt: "#f4f4f4", pants: "#3a3a3a", shoes: "#2a2a2a", apron: "#e8e8e8", hat: { type: "chef", c: "#ffffff" }, item: "book" },
 };
 
@@ -130,75 +131,159 @@ function hatParts(hat, hx, hz, add) {
   }
 }
 
-// Item held in the right hand. (x, y, z) = position of the hand.
-function itemParts(item, x, y, z, up, t, add, lights) {
-  switch (item) {
-    case "torch": {
-      add(x - 0.03, y - 0.03, z - 0.05, 0.06, 0.06, 0.42, "#6b4527", "item");
-      const f = 0.1 + Math.abs(Math.sin(t / 120)) * 0.04;
-      add(x - 0.06, y - 0.06, z + 0.37, 0.12, 0.12, f, "#ffb347", "item");
-      add(x - 0.03, y - 0.03, z + 0.39, 0.06, 0.06, f, "#fff3a0", "item");
-      lights.push([x, y, z + 0.45, "#ffb347"]);
-      break;
+// ------------------------------------------------------------ held items
+// An item is described once, in its own space:
+//   u = along the item, from the grip (0) towards its tip;
+//   a = across, left / right (the x axis of the world);
+//   b = across, the other way (its "front": where a pickaxe head points).
+// A box is [u0, u1, a0, a1, b0, b1, color, role]; a light is [u, a, b, color].
+// holdItem() then places it in the hand of a character, oriented by the pose
+// of the arm: so the item follows the hand and never ends up inside the arm.
+//   "up"    — arm raised or held forward: the item points up from the fist;
+//   "diag"  — arm down: the item is held forward and up, like in Minecraft;
+//   "front" — arm down: held upright just in front of the fist (staff, flag);
+//   "flat"  — arm down: held flat in front of the fist (book, map);
+//   "hang"  — arm down: hanging under the fist (lantern, bell).
+const flick = (t, speed = 120) => Math.abs(Math.sin(t / speed)) * 0.05;
+export const ITEMS = {
+  torch: { down: "diag", make: (t) => ({
+    boxes: [[0, 0.4, -0.03, 0.03, -0.03, 0.03, "#6b4527", "item"],
+      [0.4, 0.5 + flick(t), -0.06, 0.06, -0.06, 0.06, "#ffb347", "flame"],
+      [0.42, 0.52 + flick(t), -0.03, 0.03, -0.03, 0.03, "#fff3a0", "flame"]],
+    lights: [[0.48, 0, 0, "#ffb347"]] }) },
+  pickaxe: { down: "diag", make: () => ({
+    boxes: [[0, 0.5, -0.03, 0.03, -0.03, 0.03, "#6b4527", "item"],
+      [0.42, 0.5, -0.03, 0.03, -0.22, 0.22, "#9fd0e0", "item"]], lights: [] }) },
+  hammer: { down: "diag", make: () => ({
+    boxes: [[0, 0.36, -0.03, 0.03, -0.03, 0.03, "#6b4527", "item"],
+      [0.3, 0.44, -0.07, 0.07, -0.12, 0.12, "#8d939a", "item"]], lights: [] }) },
+  sword: { down: "diag", make: () => ({
+    boxes: [[0, 0.1, -0.03, 0.03, -0.03, 0.03, "#6b4527", "item"],
+      [0.1, 0.14, -0.1, 0.1, -0.03, 0.03, "#f2c14e", "item"],
+      [0.14, 0.64, -0.035, 0.035, -0.02, 0.02, "#dfe8f0", "item"]], lights: [] }) },
+  staff: { down: "front", make: () => ({
+    boxes: [[-0.7, 0.7, -0.03, 0.03, -0.03, 0.03, "#6b4527", "item"],
+      [0.7, 0.84, -0.07, 0.07, -0.07, 0.07, "#5ee6e0", "flame"]],
+    lights: [[0.77, 0, 0, "#5ee6e0"]] }) },
+  scroll: { down: "diag", make: () => ({
+    boxes: [[0, 0.3, -0.06, 0.06, -0.06, 0.06, "#f5ecd7", "item"],
+      [0.12, 0.16, -0.065, 0.065, -0.065, 0.065, "#a8322a", "item"]], lights: [] }) },
+  book: { down: "flat", make: () => ({
+    boxes: [[0, 0.3, -0.12, 0.12, 0, 0.08, "#5a2a8a", "item"],
+      [0.02, 0.28, -0.1, 0.1, 0.08, 0.085, "#f5ecd7", "item"]], lights: [] }) },
+  potion: { down: "front", make: () => ({
+    boxes: [[0, 0.14, -0.06, 0.06, -0.06, 0.06, "#e05ad0", "flame"],
+      [0.14, 0.22, -0.03, 0.03, -0.03, 0.03, "#dfe8f0", "item"]],
+    lights: [[0.07, 0, 0, "#e05ad0"]] }) },
+  wrench: { down: "diag", make: () => ({
+    boxes: [[0, 0.3, -0.03, 0.03, -0.03, 0.03, "#8d939a", "item"],
+      [0.26, 0.36, -0.08, 0.08, -0.03, 0.03, "#8d939a", "item"]], lights: [] }) },
+  plans: { down: "diag", make: () => ({
+    boxes: [[0, 0.4, -0.05, 0.05, -0.05, 0.05, "#7fb7e8", "item"],
+      [0.4, 0.44, -0.055, 0.055, -0.055, 0.055, "#f4f4f4", "item"]], lights: [] }) },
+  map: { down: "flat", make: () => ({
+    boxes: [[0, 0.3, -0.2, 0.2, 0, 0.02, "#e8d3a2", "item"],
+      [0.08, 0.18, -0.1, 0.02, 0.02, 0.025, "#3a7a3a", "item"],
+      [0.14, 0.2, 0.04, 0.12, 0.02, 0.025, "#e5534b", "item"]], lights: [] }) },
+  flag: { down: "front", make: (t) => ({
+    boxes: [[-0.7, 0.9, -0.03, 0.03, -0.03, 0.03, "#6b4527", "item"],
+      [0.55, 0.85 + Math.sin(t / 300) * 0.02, -0.015, 0.015, 0.03, 0.48, "#b01a2a", "item"]], lights: [] }) },
+  lantern: { down: "hang", make: () => ({
+    boxes: [[0, 0.06, -0.02, 0.02, -0.02, 0.02, "#3a3a3a", "item"],
+      [0.06, 0.28, -0.08, 0.08, -0.08, 0.08, "#3a3a3a", "item"],
+      [0.08, 0.26, -0.065, 0.065, -0.065, 0.065, "#ffd27a", "flame"]],
+    lights: [[0.17, 0, 0, "#ffd27a"]] }) },
+  bell: { down: "hang", make: () => ({
+    boxes: [[0, 0.12, -0.03, 0.03, -0.03, 0.03, "#6b4527", "item"],
+      [0.12, 0.3, -0.08, 0.08, -0.08, 0.08, "#f2c14e", "item"],
+      [0.28, 0.33, -0.1, 0.1, -0.1, 0.1, "#c29a3e", "item"]], lights: [] }) },
+};
+
+// The diagonal item starts a little in front of the fist (its first small
+// cube must not sink into the hand).
+const DIAG_GAP = 0.065;
+// Direction of an item held arm down: mostly up, leaning forward and
+// outward (away from the body, so it never crosses in front of it). Never
+// close to the axis of the camera, so it reads from all four sides.
+// out: -1 left hand, +1 right hand.
+const DIAG = { out: 0.35, fwd: 0.32, up: 0.88 };
+function diagAxes(out) {
+  const n = Math.hypot(DIAG.out, DIAG.fwd, DIAG.up);
+  const d = [(out * DIAG.out) / n, DIAG.fwd / n, DIAG.up / n];
+  const h = Math.hypot(d[0], d[1]);
+  // b: perpendicular to the item, in its vertical plane (up and back).
+  const b = [(-d[0] / h) * d[2], (-d[1] / h) * d[2], h];
+  return { d, b };
+}
+
+// grip: { x, y, z } — the point of the fist the item starts from, and the
+// faces of the fist: { front, bottom, top }. dir: see above.
+export function holdItem(name, grip, dir, t = 0) {
+  const item = ITEMS[name];
+  if (!item) return { parts: [], lights: [] };
+  const { boxes, lights } = item.make(t);
+  const parts = [];
+  const out = [];
+  const place = (u0, u1, a0, a1, b0, b1, color, role) => {
+    const x = grip.x + a0;
+    const w = a1 - a0;
+    if (dir === "up" || dir === "front") {
+      if (dir === "up" && u1 <= 0) return;
+      const lo = dir === "up" ? Math.max(0, u0) : u0;
+      const base = dir === "front" ? Math.max(0.02 - grip.z, lo) : lo;
+      if (u1 <= base) return;
+      parts.push(B(x, grip.y + b0, grip.z + base, w, b1 - b0, u1 - base, color, role));
+    } else if (dir === "flat") {
+      parts.push(B(x, grip.y + u0, grip.z + b0, w, u1 - u0, b1 - b0, color, role));
+    } else if (dir === "hang") {
+      parts.push(B(x, grip.y + b0, grip.z - u1, w, b1 - b0, u1 - u0, color, role));
+    } else {
+      // "diag": forward, outward and up, built from small cubes (pixel
+      // style).
+      const { d, b: bv } = diagAxes(grip.out || 1);
+      const du = u1 - u0;
+      const db = b1 - b0;
+      const long = Math.max(du, db);
+      const short = Math.min(du, db);
+      const steps = Math.max(1, Math.ceil(long / 0.06));
+      const size = Math.max(long / steps, short) * 0.95;
+      for (let k = 0; k < steps; k += 1) {
+        const f = (k + 0.5) / steps;
+        const u = du >= db ? u0 + f * du : (u0 + u1) / 2;
+        const b = du >= db ? (b0 + b1) / 2 : b0 + f * db;
+        const cx = x + w / 2 + u * d[0] + b * bv[0];
+        const cy = grip.y + DIAG_GAP + u * d[1] + b * bv[1];
+        const cz = grip.z + u * d[2] + b * bv[2];
+        parts.push(B(cx - w / 2, cy - size / 2, cz - size / 2, w, size, size, color, role));
+      }
     }
-    case "pickaxe":
-      add(x - 0.03, y - 0.03, z - 0.1, 0.06, 0.06, 0.5, "#6b4527", "item");
-      add(x - 0.03, y - 0.22, z + 0.35, 0.06, 0.44, 0.08, "#9fd0e0", "item");
-      break;
-    case "hammer":
-      add(x - 0.03, y - 0.03, z - 0.1, 0.06, 0.06, 0.4, "#6b4527", "item");
-      add(x - 0.07, y - 0.12, z + 0.28, 0.14, 0.24, 0.14, "#8d939a", "item");
-      break;
-    case "sword":
-      add(x - 0.03, y - 0.03, z - 0.04, 0.06, 0.06, 0.12, "#6b4527", "item");
-      add(x - 0.1, y - 0.03, z + 0.08, 0.2, 0.06, 0.04, "#f2c14e", "item");
-      add(x - 0.03, y - 0.03, z + 0.12, 0.06, 0.06, 0.5, "#dfe8f0", "item");
-      break;
-    case "staff":
-      add(x - 0.03, y - 0.03, z - 0.6, 0.06, 0.06, 1.3, "#6b4527", "item");
-      add(x - 0.07, y - 0.07, z + 0.7, 0.14, 0.14, 0.14, "#5ee6e0", "item");
-      lights.push([x, y, z + 0.77, "#5ee6e0"]);
-      break;
-    case "scroll":
-      add(x - 0.06, y - 0.14, z - 0.06, 0.12, 0.3, 0.12, "#f5ecd7", "item");
-      add(x - 0.065, y + 0.12, z - 0.065, 0.13, 0.04, 0.13, "#a8322a", "item");
-      break;
-    case "book":
-      add(x - 0.12, y - 0.02, z - 0.1, 0.24, 0.08, 0.3, "#5a2a8a", "item");
-      add(x - 0.1, y + 0.061, z - 0.08, 0.2, 0.005, 0.26, "#f5ecd7", "item");
-      break;
-    case "potion":
-      add(x - 0.06, y - 0.06, z - 0.08, 0.12, 0.12, 0.14, "#e05ad0", "item");
-      add(x - 0.03, y - 0.03, z + 0.06, 0.06, 0.06, 0.08, "#dfe8f0", "item");
-      lights.push([x, y, z, "#e05ad0"]);
-      break;
-    case "wrench":
-      add(x - 0.03, y - 0.03, z - 0.05, 0.06, 0.06, 0.36, "#8d939a", "item");
-      add(x - 0.08, y - 0.03, z + 0.28, 0.16, 0.06, 0.1, "#8d939a", "item");
-      break;
-    case "plans":
-      add(x - 0.05, y - 0.05, z - 0.15, 0.1, 0.1, 0.45, "#7fb7e8", "item");
-      add(x - 0.055, y - 0.055, z + 0.25, 0.11, 0.11, 0.04, "#f4f4f4", "item");
-      break;
-    case "map":
-      add(x - 0.2, y + 0.02, z - 0.2, 0.4, 0.02, 0.3, "#e8d3a2", "item");
-      add(x - 0.1, y + 0.045, z - 0.12, 0.12, 0.005, 0.1, "#3a7a3a", "item");
-      add(x + 0.04, y + 0.045, z - 0.06, 0.08, 0.005, 0.06, "#e5534b", "item");
-      break;
-    case "flag":
-      add(x - 0.03, y - 0.03, z - 0.5, 0.06, 0.06, 1.3, "#6b4527", "item");
-      add(x - 0.03, y + 0.03, z + 0.45, 0.03, 0.45, 0.3 + Math.sin(t / 300) * 0.02, "#b01a2a", "item");
-      break;
-    case "lantern":
-      add(x - 0.02, y - 0.02, z - 0.08, 0.04, 0.04, 0.1, "#3a3a3a", "item");
-      add(x - 0.08, y - 0.08, z - 0.3, 0.16, 0.16, 0.22, "#3a3a3a", "item");
-      add(x - 0.06, y - 0.06, z - 0.28, 0.12, 0.12, 0.18, "#ffd27a", "item");
-      lights.push([x, y, z - 0.2, "#ffd27a"]);
-      break;
-    default:
-      break;
+  };
+  for (const box of boxes) place(...box);
+  for (const [u, a, b, color] of lights) {
+    let p;
+    if (dir === "up" || dir === "front") p = [grip.x + a, grip.y + b, grip.z + u];
+    else if (dir === "flat") p = [grip.x + a, grip.y + u, grip.z + b];
+    else if (dir === "hang") p = [grip.x + a, grip.y + b, grip.z - u];
+    else {
+      const { d, b: bv } = diagAxes(grip.out || 1);
+      p = [grip.x + a + u * d[0] + b * bv[0], grip.y + DIAG_GAP + u * d[1] + b * bv[1], grip.z + u * d[2] + b * bv[2]];
+    }
+    out.push([...p, color]);
   }
-  void up;
+  return { parts, lights: out };
+}
+
+// The grip of a fist, for each pose of the arm. fist = the box of the hand.
+export function gripOf(fist, armMode, itemName) {
+  const cx = fist.x + fist.w / 2;
+  const cy = fist.y + fist.d / 2;
+  const item = ITEMS[itemName];
+  if (armMode !== "down") return { grip: { x: cx, y: cy, z: fist.z + fist.h }, dir: "up" };
+  const down = item ? item.down : "diag";
+  if (down === "hang") return { grip: { x: cx, y: cy, z: fist.z }, dir: "hang" };
+  if (down === "front") return { grip: { x: cx + (cx > 0.5 ? 0.06 : -0.06), y: fist.y + fist.d + 0.1, z: fist.z + fist.h / 2 }, dir: "front" };
+  if (down === "flat") return { grip: { x: cx + (cx > 0.5 ? 0.06 : -0.06), y: fist.y + fist.d + 0.1, z: fist.z }, dir: "flat" };
+  return { grip: { x: cx, y: fist.y + fist.d + 0.01, z: fist.z + fist.h / 2, out: cx > 0.5 ? 1 : -1 }, dir: "diag" };
 }
 
 // pose: idle | talk | cheer | sad | point
@@ -264,30 +349,35 @@ export function npcParts(skinName, pose = "idle", t = 0, seed = 0) {
     add(hx + 0.17, 0.753, hz + 0.08 - mouth, 0.16, 0.01, mouth, "#5a1a1a", "mouth");
   }
   if (s.hat) hatParts(s.hat, hx, hz, add);
-  // Arms.
+  // Arms. Each returns the box of its fist, where an item is held.
   const arm = (side, mode) => {
     const x = side === "L" ? 0.02 : 0.8;
     const role = side === "L" ? "armL" : "armR";
+    let fist;
     if (mode === "up") {
       const wave = Math.sin(t / 110 + (side === "L" ? 1 : 0)) * 0.03;
-      add(x + wave, 0.38, bz + 0.62, 0.18, 0.24, 0.62, s.shirt, role);
-      add(x + wave + 0.02, 0.4, bz + 1.22, 0.14, 0.2, 0.13, s.skin, role);
-      return [x + wave + 0.09, 0.5, bz + 1.36];
-    }
-    if (mode === "forward") {
+      add(x + wave, 0.38, bz + 0.62, 0.18, 0.24, 0.6, s.shirt, role);
+      fist = B(x + wave + 0.02, 0.4, bz + 1.22, 0.14, 0.2, 0.13, s.skin, role);
+    } else if (mode === "forward") {
       add(x, 0.38, bz + 0.46, 0.18, 0.6, 0.2, s.shirt, role);
-      add(x + 0.02, 0.98, bz + 0.48, 0.14, 0.14, 0.16, s.skin, role);
-      return [x + 0.09, 1.05, bz + 0.56];
+      fist = B(x + 0.02, 0.98, bz + 0.48, 0.14, 0.14, 0.16, s.skin, role);
+    } else {
+      const swing = pose === "idle" ? Math.sin(t / 900 + seed + (side === "L" ? 0 : 2)) * 0.02 : 0;
+      add(x, 0.38 + swing, bz + 0.09, 0.18, 0.24, 0.62 + slump, s.shirt, role);
+      fist = B(x + 0.02, 0.4 + swing, bz - 0.04, 0.14, 0.2, 0.13, s.skin, role);
     }
-    const swing = pose === "idle" ? Math.sin(t / 900 + seed + (side === "L" ? 0 : 2)) * 0.02 : 0;
-    add(x, 0.38 + swing, bz + 0.08, 0.18, 0.24, 0.62 + slump, s.shirt, role);
-    add(x + 0.02, 0.4 + swing, bz - 0.04, 0.14, 0.2, 0.13, s.skin, role);
-    return [x + 0.09, 0.5 + swing, bz - 0.02];
+    parts.push(fist);
+    return fist;
   };
   const modes = { idle: ["down", "down"], talk: ["down", "up"], cheer: ["up", "up"], sad: ["down", "down"], point: ["down", "forward"] }[pose] || ["down", "down"];
   arm("L", modes[0]);
-  const hand = arm("R", modes[1]);
-  itemParts(s.item, hand[0], hand[1], hand[2], modes[1] === "up", t, add, lights);
+  const fist = arm("R", modes[1]);
+  if (s.item && s.item !== "none") {
+    const { grip, dir } = gripOf(fist, modes[1], s.item);
+    const held = holdItem(s.item, grip, dir, t);
+    parts.push(...held.parts);
+    lights.push(...held.lights);
+  }
   return { parts, lights };
 }
 
@@ -649,6 +739,17 @@ export const PROPS = {
     return { parts: [B(0.2, 0.4, 0, 0.6, 0.3, 1.8, WOOD, "prop"), B(0.25, 0.701, 1.2, 0.5, 0.01, 0.5, "#f5ecd7", "prop"),
       B(0.48 + Math.cos(a) * 0.12, 0.703, 1.43 + Math.sin(a) * 0.12, 0.05, 0.005, 0.05, "#2a2a2a", "prop"),
       B(0.45, 0.702, 0.4, 0.1, 0.005, 0.5 + Math.sin(t / 300) * 0.05, "#f2c14e", "prop")], lights: [] };
+  },
+  // The altar of the last level: an old stone table where a shard of the
+  // Heart of the World resonates.
+  altar({ t, done }) {
+    const p = [B(0.1, 0.1, 0, 1.8, 1.8, 0.3, "#41385a", "prop"), B(0.3, 0.3, 0.3, 1.4, 1.4, 0.55, "#2f2843", "prop"),
+      B(0.25, 0.25, 0.85, 1.5, 1.5, 0.1, "#d9a640", "prop"), B(0.4, 0.4, 0.95, 1.2, 1.2, 0.05, "#4b4168", "prop")];
+    const glow = done ? "#ff5a7a" : "#c62d4a";
+    const f = Math.sin(t / 600) * 0.06;
+    p.push(B(0.82, 0.82, 1.2 + f, 0.36, 0.36, 0.36, glow, "flame"), B(0.92, 0.92, 1.56 + f, 0.16, 0.16, 0.14, "#ffe7a0", "flame"));
+    for (const [x, y] of [[0.15, 0.15], [1.65, 0.15], [0.15, 1.65], [1.65, 1.65]]) p.push(B(x, y, 0.3, 0.2, 0.2, 0.75, "#9ff7f2", "flame"));
+    return { parts: p, lights: [[1, 1, 1.4, glow], [0.25, 0.25, 0.9, "#9ff7f2"], [1.75, 1.75, 0.9, "#9ff7f2"]] };
   },
   heart({ t }) {
     const k = 1 + Math.abs(Math.sin(t / 350)) * 0.15;

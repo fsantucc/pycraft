@@ -115,6 +115,7 @@ export class Tour {
   }
 
   stop() {
+    if (this.root && this.onStop) this.onStop();
     if (this.clickTarget) this.clickTarget.removeEventListener("click", this.onTargetClick);
     this.clickTarget = null;
     if (this.onResize) window.removeEventListener("resize", this.onResize);

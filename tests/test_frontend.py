@@ -185,7 +185,7 @@ def test_browser_smoke(server_url: str) -> None:
         page = browser.new_page(viewport={"width": 1500, "height": 880})
         # The trailer of the first launch is tested on its own below.
         page.add_init_script(
-            "localStorage.setItem('pycraft.trailerSeen', '3')")
+            "localStorage.setItem('pycraft.trailerSeen', '6')")
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(server_url)
         page.wait_for_timeout(1500)
@@ -194,8 +194,9 @@ def test_browser_smoke(server_url: str) -> None:
                       ".classList.add('hidden')")
         # The story of the first level is told first (it can only be
         # played faster), then the other steps open.
-        page.evaluate("window.pycraft.world.setCineSpeed(4)")
-        page.wait_for_function("!window.pycraft.world.cine", timeout=30000)
+        page.evaluate(SKIP_CINEMATIC)
+        page.wait_for_function("!window.pycraft.world.cinematic",
+                               timeout=30000)
         page.evaluate("window.pycraft.goStep('experiment')")
         page.wait_for_timeout(400)
         page.fill("#editor textarea", PROGRAM)
@@ -310,7 +311,16 @@ def test_every_sound_renders_cleanly(server_url: str) -> None:
         assert 0.01 < level["peak"] < 0.98, (name, level["peak"])
 
 
-def test_first_launch_trailer_cannot_be_skipped(server_url: str) -> None:
+SKIP_CINEMATIC = """() => {
+    const c = window.pycraft.world.cinematic;
+    for (let i = 0; c && !c.done && i < 60; i += 1) c.next();
+}"""
+
+
+def test_first_launch_trailer(server_url: str) -> None:
+    """The trailer plays at the first launch: it can be paused and walked
+    through step by step, not jumped over; then the story of the first level
+    keeps the lesson locked until its last step."""
     playwright = pytest.importorskip("playwright.sync_api")
     chrome = _browser()
     if chrome is None:
@@ -324,26 +334,162 @@ def test_first_launch_trailer_cannot_be_skipped(server_url: str) -> None:
         page.goto(server_url)
         page.wait_for_timeout(1500)
         assert page.locator(".tr-start").is_visible()
-        assert page.locator(".trailer >> text=Quitter").count() == 0
         page.click("text=Découvrir PyCraft")
-        page.wait_for_timeout(800)
+        page.wait_for_timeout(900)
         page.keyboard.press("Escape")
         assert page.locator(".trailer").count() == 1  # not skipped
-        page.wait_for_timeout(2500)
-        # The maps show their characters and creatures, and each level shown
-        # says what is learned there.
+        assert page.locator(".cine-controls .close").count() == 0
+        # A memory: just the name of the world, no description.
+        assert page.locator(".tr-world").inner_text().upper().startswith(
+            "ACTE I ·")
+        assert page.locator(".tr-map.show").count() == 0
         assert page.evaluate("window.pycraft.world.stage.npcs.length") > 0
-        assert "Tu y apprends" in page.locator(".tr-learn").inner_text()
-        assert "Niveau" in page.locator(".tr-map-level").inner_text()
-        page.evaluate("window.pycraft.trailer.rate = 8")
-        page.wait_for_selector(".trailer", state="detached", timeout=90000)
+        page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(300)
+        assert page.evaluate("window.pycraft.world.cinematic.index") == 1
+        # Three phases: the journey (one memory per world of acts I-III),
+        # the approach (act IV), then the silence and the Heart of the
+        # World, with the question asked to the player.
+        labels: Any = page.evaluate(
+            "window.pycraft.world.cinematic.steps.map(s => s.label)")
+        kinds = [label.split()[0] for label in labels]
+        assert kinds == (["souvenir"] * 10 + ["approche"] * 2
+                         + ["silence", "sleeping", "seals", "awakening",
+                            "burst", "défi", "fin"])
+        seen: Any = page.evaluate("""() => {
+            const w = window.pycraft.world;
+            const out = [];
+            for (let i = 0; w.cinematic && i < 60; i += 1) {
+                out.push([w.themeName, w.grade && w.grade.kind,
+                          !!w.challenge]);
+                w.cinematic.next();
+            }
+            return out;
+        }""")
+        # (the first memory was left with ArrowRight above)
+        assert [g for _, g, _ in seen[:9]] == ["memory"] * 9
+        assert [g for _, g, _ in seen[9:11]] == ["approach"] * 2
+        assert seen[11] == ["coeur", "black", False]
+        assert [c for _, _, c in seen].count(True) == 1
+        assert [t for t, _, _ in seen[11:]] == ["coeur"] * 7
+        page.wait_for_selector(".trailer", state="detached", timeout=30000)
         assert page.evaluate(
-            "localStorage.getItem('pycraft.trailerSeen')") == "3"
+            "localStorage.getItem('pycraft.trailerSeen')") == "6"
         page.wait_for_timeout(800)
-        # Then the story of the first level: locked until it is told.
-        info: Any = page.evaluate("window.pycraft.world.cineInfo()")
-        assert info and info["blocking"]
+        # Then the story of the first level.
+        info: Any = page.evaluate("window.pycraft.world.cinematic.info()")
+        assert info["blocking"] and info["kind"] == "story"
         page.evaluate("window.pycraft.goStep('explain')")
         assert page.evaluate("window.pycraft.step") == "story"
+        # The welcome window covers it: the story waits, paused, and its
+        # buttons stay under the window.
+        assert page.locator("#overlay").is_visible()
+        assert info["paused"] is True
+        page.click("text=Je connais déjà")
+        page.wait_for_timeout(300)
+        assert page.evaluate(
+            "window.pycraft.world.cinematic.paused") is False
+        browser.close()
+    assert not errors, errors
+
+
+def test_cinematic_controls(server_url: str) -> None:
+    """Pause freezes the world; next / previous rebuild the step from
+    scratch: one bubble, the right line, nothing fired twice."""
+    playwright = pytest.importorskip("playwright.sync_api")
+    chrome = _browser()
+    if chrome is None:
+        pytest.skip("aucun navigateur Chrome/Chromium")
+    errors: list[str] = []
+    with playwright.sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=chrome,
+                                    args=["--no-sandbox"])
+        page = browser.new_page(viewport={"width": 1300, "height": 800})
+        page.add_init_script(
+            "localStorage.setItem('pycraft.trailerSeen', '6');"
+            "localStorage.setItem('pycraft.welcomed', '1')")
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(server_url)
+        page.wait_for_timeout(1500)
+        bubbles = """() => window.pycraft.world.effects
+            .filter(f => f.kind === 'bubble' && f.npc).map(f => f.text)"""
+        intro: Any = page.evaluate("window.pycraft.level.scene.intro")
+        assert page.evaluate("window.pycraft.world.cinematic.index") == 0
+        page.click(".cine-controls .main")  # pause
+        t0 = page.evaluate("window.pycraft.world.now()")
+        page.wait_for_timeout(700)
+        assert page.evaluate("window.pycraft.world.now()") == t0
+        assert page.evaluate("window.pycraft.world.cinematic.index") == 0
+        page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(200)
+        assert page.evaluate(bubbles) == [intro[1][1]]
+        page.keyboard.press("ArrowLeft")
+        page.wait_for_timeout(200)
+        assert page.evaluate(bubbles) == [intro[0][1]]
+        assert page.evaluate("window.pycraft.world.cinematic.index") == 0
+        page.keyboard.press(" ")  # resume
+        page.wait_for_timeout(500)
+        assert page.evaluate("window.pycraft.world.now()") > t0
+        page.evaluate(SKIP_CINEMATIC)
+        page.wait_for_function("!window.pycraft.world.cinematic")
+        assert page.evaluate("window.pycraft.world.paused") is False
+        browser.close()
+    assert not errors, errors
+
+
+def test_finale_of_the_last_level(server_url: str) -> None:
+    """The last level has its own place and cinematic: every step sets the
+    state of the Heart, backwards as well as forwards."""
+    playwright = pytest.importorskip("playwright.sync_api")
+    chrome = _browser()
+    if chrome is None:
+        pytest.skip("aucun navigateur Chrome/Chromium")
+    errors: list[str] = []
+    with playwright.sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=chrome,
+                                    args=["--no-sandbox"])
+        page = browser.new_page(viewport={"width": 1300, "height": 800})
+        page.add_init_script(
+            "localStorage.setItem('pycraft.trailerSeen', '6');"
+            "localStorage.setItem('pycraft.welcomed', '1')")
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(server_url)
+        page.wait_for_timeout(1200)
+        page.evaluate(SKIP_CINEMATIC)
+        page.evaluate("""async () => {
+            const a = window.pycraft;
+            a.progress.levels.k3l1.status = 'available';
+            await a.openLevel('k3l1');
+        }""")
+        page.wait_for_timeout(800)
+        state = """() => {
+            const w = window.pycraft.world;
+            return [w.themeName, w.cinematic && w.cinematic.kind,
+                    w.cinematic && w.cinematic.index, w.heart.awake,
+                    w.heart.seals];
+        }"""
+        assert page.evaluate(state) == ["coeur", "finale", 0, 0, 0]
+        for _ in range(3):
+            page.keyboard.press("ArrowRight")
+        page.wait_for_timeout(200)
+        assert page.evaluate(state)[2:] == [3, 1, 4]   # awakening
+        page.keyboard.press("ArrowLeft")
+        page.wait_for_timeout(200)
+        assert page.evaluate(state)[2:] == [2, 0, 0]   # seals, from 0 again
+        page.evaluate(SKIP_CINEMATIC)
+        page.wait_for_function("!window.pycraft.world.cinematic")
+        assert page.evaluate(state)[3:] == [1, 0]
+        # The Heart answers a click (it beats).
+        page.wait_for_timeout(600)
+        before = page.evaluate("window.pycraft.world.heart.pulseAt")
+        box = page.locator("#world").bounding_box()
+        assert box is not None
+        hx, hy = page.evaluate("""async () => {
+            const { HEART } = await import('/js/coeur.js');
+            return window.pycraft.world.project(HEART.x, HEART.y, HEART.z);
+        }""")
+        page.mouse.click(box["x"] + hx, box["y"] + hy)
+        page.wait_for_timeout(200)
+        assert page.evaluate("window.pycraft.world.heart.pulseAt") > before
         browser.close()
     assert not errors, errors

@@ -128,15 +128,48 @@ synthétisé par le navigateur, aucun fichier audio :
 
 **Visite guidée** : proposée au premier lancement, rejouable avec le bouton **?**.
 
-**Aperçu (premier lancement)** : une bande-annonce rapide (~35 s) qui montre les maps,
-leurs personnages et leurs créatures, quelques attaques et quelques réalisations ; pour
-chaque niveau affiché, une carte indique la région, le niveau et ce qu'on y apprend, sans
-rien dévoiler de l'histoire ni des exercices. Elle ne peut pas être passée. Le bouton 🎬
-la rejoue (et là, on peut la quitter).
+**Cinématiques** : la bande-annonce, l'histoire de chaque niveau et la finale utilisent le
+même moteur (`web/js/cinematic.js`), avec les mêmes commandes :
+
+| Commande | Bouton | Clavier |
+|---|---|---|
+| Étape précédente | ⏮ | ← |
+| Pause / reprise | ⏸ / ▶ | Espace |
+| Étape suivante (chaque appui avance d'une étape, jusqu'à la fin) | ⏭ | → |
+
+Chaque étape remet le monde dans son état de départ (décor, personnages, caméra, sons) :
+on peut revenir en arrière, sauter ou mettre en pause à tout moment sans désynchronisation
+ni événement joué deux fois. La pause fige vraiment le monde (animations, bulles, effets,
+sons). Une cinématique attend aussi, en pause, quand une fenêtre ou la visite guidée la
+recouvre.
+
+**Aperçu (premier lancement)** : le voyage vers le Cœur du Monde, en trois phases.
+
+1. *Le voyage* (actes I, II et III) : une seule image par monde, comme un souvenir
+   fugace (flash de lumière chaude, flou qui se dissipe, caméra qui glisse), de plus en
+   plus rapide ; seul le nom du monde s'affiche.
+2. *L'approche* (acte IV) : le rythme ralentit, la lumière devient froide et sombre, un
+   bourdon et un battement de cœur lointain qui se rapproche.
+3. *Le défi ultime* : rupture — noir complet, silence, un cœur qui bat — puis le Cœur du
+   Monde (endormi, ses quatre sceaux, son éveil, l'explosion de lumière) et la question
+   « Mais seras-tu capable d'atteindre Le Cœur du Monde ? ».
+
+En bas de l'écran, le chemin du voyage montre les 13 mondes acte par acte jusqu'au Cœur ;
+à la fin, il indique « Tu es ici » sur la Prairie et le Cœur verrouillé 🔒 au bout. Rien de
+l'histoire ni des exercices n'est dévoilé. On peut avancer étape par étape, pas quitter ;
+le bouton 🎬 la rejoue (et là, ✕ la ferme).
 
 **Cinématique d'histoire** : la première fois qu'on ouvre un niveau, les personnages
 racontent l'histoire ; tant qu'ils n'ont pas fini, « Comprendre → » et les autres étapes
-restent verrouillés. Les boutons ×1 / ×2 / ×4 accélèrent la cinématique, sans la passer.
+restent verrouillés (⏭ fait avancer, réplique par réplique).
+
+**Le Cœur du Monde (niveau final)** : une région à part, avec son ciel d'aurores, ses
+terrasses, ses îles flottantes, ses cristaux suspendus, quatre sceaux (un par acte) et
+le Cœur qui flotte au-dessus de son autel. Sa cinématique s'ouvre dans le noir, montre le
+Cœur endormi, allume les sceaux un à un, puis l'éveil et l'explosion de lumière, avant
+que le gardien ne parle. Pendant la mission, chaque vérification réussie rallume les
+sceaux ; la réussite éveille complètement le Cœur. Clique sur le Cœur ou sur un sceau
+pour l'écouter. Code : `web/js/coeur.js` (le lieu) et `web/js/finale.js` (la cinématique).
 
 **Scènes d'histoire** : chaque niveau (les 43) a sa scène dans le coin droit de la carte,
 avec les personnages et le décor de l'histoire (le villageois et sa maison à éclairer, le

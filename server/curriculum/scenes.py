@@ -469,14 +469,17 @@ SCENES: dict[str, dict[str, Any]] = {
         ("alchimiste", "Tu parles sa langue mieux que lui ! L'Alchimiste est vaincu."),
     ),
     "k3l1": scene(
-        [npc("roi", "Le gardien du Cœur", "king", FRONT),
+        [npc("gardien", "Le gardien du Cœur", "warden", FRONT),
          npc("cartographe", "Le cartographe", "cartographer", SECOND)],
-        [prop("heart", BACK, "le Cœur du Monde"), prop("maptable", RIGHT, "les chunks"), prop("crystal", SIDE, color="#f2c14e")],
-        [("roi", "Tout converge ici. Le Cœur du Monde a besoin de toi."),
-         ("cartographe", "Charger des chunks depuis la ligne de commande, refuser les données corrompues…"),
-         ("roi", "Retrouver n'importe quel chunk, parcourir le monde sans tout charger…"),
-         ("roi", "C'est l'épreuve finale : les quatre actes en un seul programme.")],
-        ("roi", "Le Cœur du Monde bat de nouveau ! Tu as terminé PyCraft !"),
+        [prop("altar", BACK, "l'autel du Cœur"), prop("maptable", RIGHT, "les chunks"), prop("crystal", SIDE, color="#f2c14e")],
+        [("gardien", "Tu es venu jusqu'ici. Bien peu de voyageurs atteignent le Cœur du Monde."),
+         ("gardien", "Le Cœur s'est éveillé à ton arrivée… mais ses sceaux s'éteignent déjà."),
+         ("cartographe", "Tout ce que tu as appris converge ici. Rallume les quatre sceaux, et il s'éveillera."),
+         ("gardien", "Ce sera ton plus grand programme. Prends ton temps : le Cœur t'attendra.")],
+        ("gardien", "Les quatre sceaux brillent. Le Cœur du Monde bat de nouveau ! Tu as terminé PyCraft !"),
+        ("gardien", "Les sceaux vacillent… Regarde les vérifications en ✗ et réessaie."),
         argv_by="cartographe",
     ),
 }
+# The last level has its own cinematic (see web/js/finale.js).
+SCENES["k3l1"]["cinematic"] = "finale"

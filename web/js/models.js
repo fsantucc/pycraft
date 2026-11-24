@@ -1,6 +1,7 @@
 // Voxel models. The model of an object is chosen from its class name
 // (and inherited from its parent class when the name is unknown), and is
 // driven by the object's real attributes (color, fuel, power…).
+import { gripOf, holdItem } from "./scene.js";
 import { hashColor } from "./util.js";
 
 const COLORS = {
@@ -122,62 +123,67 @@ export function crierParts(pose = "idle", t = 0) {
   add(hx + 0.4, 0.34, tz + 0.2, 0.05, 0.26, 0.26, "#e5534b", "hat");
   add(hx + 0.41, 0.52, tz + 0.4, 0.04, 0.12, 0.08, "#ff8a7a", "hat");
 
-  // Arms. Each returns the position of the hand.
+  // Arms: sleeve, gold cuff, fist — stacked without overlapping, so they are
+  // always drawn in the right order. Each returns the box of its fist.
   const arm = (side, mode) => {
     const x = (side === "L" ? 0.02 : 0.8) + shake;
     const role = side === "L" ? "armL" : "armR";
+    let fist;
     if (mode === "up") {
       const wave = Math.sin(t / 90) * 0.03;
-      add(x + wave, 0.38, bz + 0.66, 0.18, 0.24, 0.62, coat, role);
+      add(x + wave, 0.38, bz + 0.66, 0.18, 0.24, 0.56, coat, role);
       add(x + wave - 0.005, 0.375, bz + 1.22, 0.19, 0.25, 0.08, gold, role);
-      add(x + wave + 0.02, 0.4, bz + 1.3, 0.14, 0.2, 0.14, skin, role);
-      return [x + wave + 0.09, 0.5, bz + 1.44];
-    }
-    if (mode === "forward") {
-      add(x, 0.38, bz + 0.5, 0.18, 0.62, 0.2, coat, role);
+      fist = B(x + wave + 0.02, 0.4, bz + 1.3, 0.14, 0.2, 0.14, skin, role);
+    } else if (mode === "forward") {
+      add(x, 0.38, bz + 0.5, 0.18, 0.61, 0.2, coat, role);
       add(x - 0.005, 0.99, bz + 0.495, 0.19, 0.06, 0.21, gold, role);
-      add(x + 0.02, 1.05, bz + 0.52, 0.14, 0.14, 0.16, skin, role);
-      return [x + 0.09, 1.12, bz + 0.6];
+      fist = B(x + 0.02, 1.05, bz + 0.52, 0.14, 0.14, 0.16, skin, role);
+    } else {
+      const swing = pose === "idle" ? Math.sin(t / 900 + (side === "L" ? 0 : 2)) * 0.02 : 0;
+      add(x, 0.38 + swing, bz + 0.18, 0.18, 0.24, 0.56, coat, role);
+      add(x - 0.005, 0.375 + swing, bz + 0.1, 0.19, 0.25, 0.08, gold, role);
+      fist = B(x + 0.02, 0.4 + swing, bz - 0.03, 0.14, 0.2, 0.13, skin, role);
     }
-    const swing = pose === "idle" ? Math.sin(t / 900 + (side === "L" ? 0 : 2)) * 0.02 : 0;
-    add(x, 0.38 + swing, bz + 0.12, 0.18, 0.24, 0.62, coat, role);
-    add(x - 0.005, 0.375 + swing, bz + 0.1, 0.19, 0.25, 0.08, gold, role);
-    add(x + 0.02, 0.4 + swing, bz - 0.02, 0.14, 0.2, 0.13, skin, role);
-    return [x + 0.09, 0.5 + swing, bz - 0.02];
+    parts.push(fist);
+    return fist;
   };
   const modes = {
     idle: ["down", "down"], speak: ["down", "up"], ask: ["forward", "down"], read: ["forward", "down"],
     call: ["down", "forward"], alert: ["up", "up"], cheer: ["up", "up"],
   }[pose] || ["down", "down"];
-  const handL = arm("L", modes[0]);
-  const handR = arm("R", modes[1]);
+  const fistL = arm("L", modes[0]);
+  const fistR = arm("R", modes[1]);
 
-  // Bell in the right hand (rings when he speaks).
-  const ring = pose === "speak" || pose === "cheer" ? Math.sin(t / 55) * 0.06 : 0;
-  const [bx, by, bzz] = handR;
-  if (modes[1] === "up") {
-    add(bx - 0.03, by - 0.03, bzz - 0.02, 0.06, 0.06, 0.14, "#6b4527", "bell");
-    add(bx - 0.1 + ring, by - 0.1, bzz + 0.12, 0.2, 0.2, 0.06, shadeColor(gold, 0.8), "bell");
-    add(bx - 0.08 + ring, by - 0.08, bzz + 0.18, 0.16, 0.16, 0.12, gold, "bell");
-    add(bx - 0.04 + ring, by - 0.04, bzz + 0.3, 0.08, 0.08, 0.05, "#ffe9a0", "bell");
-  } else {
-    add(bx - 0.03, by - 0.03, bzz - 0.12, 0.06, 0.06, 0.12, "#6b4527", "bell");
-    add(bx - 0.08, by - 0.08, bzz - 0.3, 0.16, 0.16, 0.18, gold, "bell");
-    add(bx - 0.1, by - 0.1, bzz - 0.33, 0.2, 0.2, 0.05, shadeColor(gold, 0.8), "bell");
+  // Bell in the right hand (it swings and rings when he speaks).
+  const ring = pose === "speak" || pose === "cheer" ? Math.sin(t / 55) * 0.05 : 0;
+  const bell = gripOf(fistR, modes[1], "bell");
+  for (const p of holdItem("bell", bell.grip, bell.dir, t).parts) {
+    parts.push({ ...p, x: p.c === "#6b4527" ? p.x : p.x + ring, role: "bell" });
   }
 
   // Scroll in the left hand: rolled, or open in front of him to read.
-  const [sx, sy, sz] = handL;
   if (modes[0] === "forward") {
-    add(sx - 0.05, sy + 0.04, sz - 0.42, 0.6, 0.02, 0.5, "#f5ecd7", "scroll");
-    add(sx - 0.08, sy + 0.03, sz + 0.06, 0.66, 0.05, 0.06, "#c9a86a", "scroll");
-    add(sx - 0.08, sy + 0.03, sz - 0.46, 0.66, 0.05, 0.06, "#c9a86a", "scroll");
-    for (let i = 0; i < 4; i += 1) add(sx + 0.04, sy + 0.061, sz - 0.04 - i * 0.1, 0.42 - (i % 2) * 0.12, 0.005, 0.03, "#7a5a3a", "scroll");
-  } else if (modes[0] === "down") {
-    add(sx - 0.06, sy - 0.18, sz - 0.08, 0.12, 0.36, 0.12, "#f5ecd7", "scroll");
-    add(sx - 0.065, sy - 0.02, sz - 0.085, 0.13, 0.04, 0.13, red, "scroll");
+    const sx = fistL.x - 0.07;
+    const sy = fistL.y + fistL.d + 0.01;
+    const top = fistL.z + fistL.h;
+    add(sx, sy, top - 0.5, 0.6, 0.02, 0.5, "#f5ecd7", "scroll");
+    add(sx - 0.03, sy, top, 0.66, 0.05, 0.06, "#c9a86a", "scroll");
+    add(sx - 0.03, sy, top - 0.56, 0.66, 0.05, 0.06, "#c9a86a", "scroll");
+    for (let i = 0; i < 4; i += 1) add(sx + 0.09, sy + 0.021, top - 0.12 - i * 0.1, 0.42 - (i % 2) * 0.12, 0.005, 0.03, "#7a5a3a", "scroll");
+  } else {
+    const roll = gripOf(fistL, modes[0], "scroll");
+    for (const p of holdItem("scroll", roll.grip, roll.dir, t).parts) parts.push({ ...p, role: "scroll" });
   }
   return parts;
+}
+
+// An item in the right hand of a humanoid model (arm hanging down): it is
+// attached to the fist and moves with the arm (role "armR").
+function heldBy(item) {
+  const L = 0.75;
+  const fist = B(0.78, 0.37, L + 0.05, 0.2, 0.26, 0.13, "#000", "armR");
+  const { grip, dir } = gripOf(fist, "down", item);
+  return holdItem(item, grip, dir, 0).parts.map((p) => ({ ...p, role: "armR" }));
 }
 
 function humanoid({ head = "#c99a6c", body = "#39a0c4", legs = "#3b3b8f", arms = null, scale = 1,
@@ -276,7 +282,7 @@ const MODELS = [
     make: (a, name) => humanoid({ head: "#c99a6c", body: /build|bati/.test(name) ? "#a0632e" : /farm|ferm/.test(name) ? "#5d8a35" : "#7a5230",
       legs: "#5a3a20", arms: "#6b4527", nose: true }) },
   { keys: ["miner", "mineur"], make: (a, name) => humanoid({ head: "#c99a6c", body: /master|maitre|maître/.test(name) ? "#6a4fb0" : "#646464",
-    legs: "#3c3c3c", nose: true, hair: "#f2c14e" }).concat([B(0.95, 0.45, 1.2, 0.1, 0.1, 0.6, "#9b7445", "armR"), B(0.8, 0.4, 1.75, 0.4, 0.2, 0.1, "#bfbfbf", "armR")]) },
+    legs: "#3c3c3c", nose: true, hair: "#f2c14e" }).concat(heldBy("pickaxe")) },
   { keys: ["player", "joueur", "steve", "alex", "hero", "héros", "knight", "chevalier", "fighter", "combattant", "archer", "guard", "garde", "warrior", "guerrier"],
     make: () => humanoid({ head: "#c99a6c", hair: "#4a2f1a", body: "#36a3b8", legs: "#3b3b8f", arms: "#c99a6c" }) },
   { keys: ["chest", "coffre", "vault", "inventory", "inventaire", "box", "boite", "boîte", "backpack", "sac", "bag", "bank"],

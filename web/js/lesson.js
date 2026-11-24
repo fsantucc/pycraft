@@ -33,7 +33,7 @@ export class LessonPanel {
   }
 
   reachable(key) {
-    const cine = this.app.world && this.app.world.cine;
+    const cine = this.app.world && this.app.world.cinematic;
     if (cine && cine.blocking && key !== "story") return false;
     const st = this.levelState();
     const seen = st.steps_seen || [];
@@ -76,7 +76,7 @@ export class LessonPanel {
         disabled: !open,
         role: "tab",
         "aria-selected": this.app.step === s.key ? "true" : "false",
-        title: open ? `Étape ${i + 1} : ${name}` : this.app.world.cine && this.app.world.cine.blocking
+        title: open ? `Étape ${i + 1} : ${name}` : this.app.world.cinematic && this.app.world.cinematic.blocking
           ? `${name} — écoute d'abord l'histoire jusqu'au bout`
           : `${name} — termine d'abord l'étape précédente`,
         onclick: () => this.app.goStep(s.key),
@@ -134,44 +134,35 @@ export class LessonPanel {
     body.append(el("div", { class: "card" },
       el("h4", {}, "👀 Observe le monde"),
       el("p", {}, "Le monde au centre rejoue le programme de démonstration, instruction par instruction. Le code est encore caché : regarde d'abord ce qui apparaît, ce qui change, qui parle."),
-      el("button", { class: "tiny", disabled: !!this.app.world.cine, onclick: () => this.app.runDemo(true) }, "↻ Revoir l'animation"),
+      el("button", { class: "tiny", disabled: !!this.app.world.cinematic, onclick: () => this.app.runDemo(true) }, "↻ Revoir l'animation"),
       level.scene && level.scene.npcs && level.scene.npcs.length
-        ? el("button", { class: "tiny", style: "margin-left:6px", disabled: !!this.app.world.cine, onclick: () => this.app.world.playIntro() }, "💬 Réécouter les personnages")
+        ? el("button", { class: "tiny", style: "margin-left:6px", disabled: !!this.app.world.cinematic, onclick: () => this.app.replayStory() }, "💬 Revoir la scène")
         : null));
     this.storyFoot();
   }
 
   // Footer of the story step: while the characters speak for the first
-  // time, the only choice is the speed (×1, ×2, ×4); "Comprendre" waits.
+  // time, "Comprendre" waits; the cinematic is driven with its own controls
+  // (⏮ ⏸ ⏭) on the world.
   storyFoot() {
-    const info = this.app.world.cineInfo();
-    if (info && info.blocking) {
-      const els = this.cineEls;
-      if (els && this.footBtns.contains(els.speeds)) {
-        // Only refresh what changes (rebuilding would eat the clicks).
-        els.label.textContent = `🎬 Histoire ${Math.max(1, info.line)}/${info.lines}`;
-        els.fill.style.width = `${Math.round(info.progress * 100)}%`;
-        [...els.speeds.children].forEach((b) => b.classList.toggle("on", Number(b.dataset.x) === info.speed));
+    const cine = this.app.world.cinematic;
+    const info = cine && cine.blocking ? cine.info() : null;
+    if (info) {
+      if (this.cineLabel && this.footInfo.contains(this.cineLabel)) {
+        this.cineLabel.textContent = `🎬 Scène ${info.index + 1}/${info.count}${info.paused ? " · en pause" : ""}`;
         return;
       }
       this.footBtns.innerHTML = "";
       this.footInfo.innerHTML = "";
-      const label = el("span", { class: "cine-label" });
-      const fill = el("span");
-      this.footInfo.append(label, el("span", { class: "cine-bar" }, fill));
-      const speeds = el("div", { class: "cine-speed", title: "Vitesse de l'histoire" });
-      for (const x of [1, 2, 4]) {
-        speeds.append(el("button", { class: "tiny", "data-x": String(x), onclick: () => this.app.world.setCineSpeed(x) },
-          x === 1 ? "▶ ×1" : x === 2 ? "⏩ ×2" : "⏩ ×4"));
-      }
-      this.footBtns.append(speeds, el("button", {
+      this.cineLabel = el("span", { class: "cine-label" });
+      this.footInfo.append(this.cineLabel, el("span", { class: "small muted" }, "⏭ ou → pour avancer"));
+      this.footBtns.append(el("button", {
         class: "mc-btn primary", disabled: true,
-        title: "Écoute d'abord l'histoire jusqu'au bout (tu peux l'accélérer)",
+        title: "Regarde d'abord la scène jusqu'au bout (⏭ pour avancer étape par étape)",
       }, "🔒 Comprendre →"));
-      this.cineEls = { label, fill, speeds };
       this.storyFoot();
     } else {
-      this.cineEls = null;
+      this.cineLabel = null;
       this.footBtns.innerHTML = "";
       this.footInfo.textContent = "Étape 1/7 · Découverte";
       this.next("Comprendre →", "explain");

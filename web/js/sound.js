@@ -372,6 +372,32 @@ const SOUNDS = {
     pad(g, out, t + 0.35, [mtof(60), mtof(67), mtof(72), mtof(76)], 1.2, 0.09, 1500);
     bell(g, out, t + 0.35, mtof(96), 0.1, 2);
   },
+  // --- the finale of the last level
+  heartbeat(g, out, t) {
+    thump(g, out, t, 78, 38, 0.28, 0.85);
+    thump(g, out, t + 0.24, 70, 34, 0.34, 0.6);
+    noise(g, out, t, { dur: 0.3, vol: 0.12, type: "lowpass", freq: 180, q: 0.8 });
+  },
+  drone(g, out, t) {
+    pad(g, out, t, [mtof(38), mtof(45), mtof(50), mtof(57)], 3.2, 0.1, 520);
+    noise(g, out, t, { dur: 3.4, vol: 0.06, type: "bandpass", freq: 300, to: 1100, q: 1.4, a: 1.2 });
+  },
+  chime(g, out, t, opts) {
+    const note = opts.note || 76;
+    bell(g, out, t, mtof(note), 0.16, 2.4);
+    bell(g, out, t + 0.04, mtof(note + 12), 0.05, 1.6);
+    pad(g, out, t, [mtof(note - 24), mtof(note - 17)], 1.2, 0.04, 1600);
+  },
+  riser(g, out, t) {
+    noise(g, out, t, { dur: 2.6, vol: 0.2, type: "bandpass", freq: 180, to: 5200, q: 2.2, a: 2.2 });
+    chip(g, out, t, 70, 2.6, 0.03, "sawtooth", 420);
+  },
+  impact(g, out, t) {
+    noise(g, out, t, { dur: 2.2, vol: 0.5, type: "lowpass", freq: 5000, to: 60, q: 0.8 });
+    thump(g, out, t, 110, 28, 1.4, 0.75);
+    [84, 91, 96, 100].forEach((m, i) => bell(g, out, t + i * 0.05, mtof(m), 0.07, 3.2));
+    pad(g, out, t + 0.05, [mtof(38), mtof(50), mtof(57), mtof(62), mtof(66)], 3.0, 0.08, 1700);
+  },
   step(g, out, t) {
     noise(g, out, t, { dur: 0.05, vol: rand(0.12, 0.18), type: "lowpass", freq: rand(500, 800), q: 1 });
   },
@@ -385,8 +411,10 @@ const MIX = {
   spot: ["sfx", 0.8, 0.45], hint: ["sfx", 0.9, 0.45], xp: ["sfx", 0.8, 0.15], page: ["sfx", 0.8, 0.15],
   whoosh: ["sfx", 0.8, 0.2], victory: ["sfx", 1, 0.4], fail: ["sfx", 0.9, 0.35], achievement: ["sfx", 1, 0.5],
   levelup: ["sfx", 1, 0.45], step: ["sfx", 0.6, 0.05],
+  heartbeat: ["sfx", 1, 0.2], drone: ["sfx", 0.9, 0.6], chime: ["sfx", 1, 0.6], riser: ["sfx", 0.9, 0.45],
+  impact: ["sfx", 1, 0.5],
 };
-const DUCK = new Set(["victory", "achievement", "levelup", "boom", "fail"]);
+const DUCK = new Set(["victory", "achievement", "levelup", "boom", "fail", "impact", "drone", "riser"]);
 
 // ------------------------------------------------------------- music
 // One mood per region: scale, root note, tempo, chord progression (scale
@@ -407,6 +435,11 @@ export const MOODS = {
   royaume: { root: 55, scale: MAJOR, bpm: 80, chords: [0, 4, 5, 3], density: 0.5, lead: "pluck", cutoff: 1600 },
   faille: { root: 53, scale: PHRYGIAN, bpm: 60, chords: [0, 1, 0, 6], density: 0.3, lead: "bell", cutoff: 600, drone: true },
   biblio: { root: 65, scale: MAJOR, bpm: 70, chords: [0, 3, 5, 4], density: 0.38, lead: "pluck", cutoff: 1300 },
+  coeur: { root: 62, scale: LYDIAN, bpm: 56, chords: [0, 4, 5, 3], density: 0.28, lead: "bell", cutoff: 1300, drone: true, drips: true },
+  // The trailer: the journey (bright, quick), then the approach of the end
+  // (minor, slower, a drone underneath).
+  voyage: { root: 60, scale: MAJOR, bpm: 96, chords: [0, 5, 3, 4], density: 0.55, lead: "pluck", cutoff: 1800 },
+  approche: { root: 57, scale: MINOR, bpm: 62, chords: [0, 5, 6, 4], density: 0.34, lead: "bell", cutoff: 850, drone: true },
 };
 
 class Music {
@@ -501,7 +534,7 @@ class SoundBoard {
     this.music = new Music(this);
     this.unlock = () => {
       this.context();
-      if (this.graph && this.graph.ctx.state === "suspended") this.graph.ctx.resume().catch(() => {});
+      if (!this.held && this.graph && this.graph.ctx.state === "suspended") this.graph.ctx.resume().catch(() => {});
       this.updateMusic();
     };
     // Browsers only allow audio after a gesture of the player.
@@ -566,7 +599,30 @@ class SoundBoard {
   }
 
   setMood(theme) {
-    this.music.setMood(theme);
+    if (!this.moodLock) this.music.setMood(theme);
+  }
+
+  // The trailer chooses its own music, whatever the place shown (null: the
+  // places choose again).
+  lockMood(name) {
+    this.moodLock = name || null;
+    if (name) this.music.setMood(name);
+  }
+
+  // Silence of the music for a dramatic pause, then it comes back slowly.
+  // seconds = 0: back at once.
+  hush(seconds = 0) {
+    const g = this.graph;
+    if (!g) return;
+    const now = g.ctx.currentTime;
+    const full = this.settings.musicOn ? this.settings.music * 0.6 : 0;
+    g.bus.music.gain.cancelScheduledValues(now);
+    if (seconds > 0) {
+      g.bus.music.gain.setTargetAtTime(0, now, 0.12);
+      g.bus.music.gain.setTargetAtTime(full, now + seconds, 1.2);
+    } else {
+      g.bus.music.gain.setTargetAtTime(full, now, 0.2);
+    }
   }
 
   duck(seconds = 2) {
@@ -579,6 +635,50 @@ class SoundBoard {
     g.bus.music.gain.setTargetAtTime(full, now + seconds, 0.6);
   }
 
+  // ------------------------------------------------ cinematics
+  // While a cinematic plays, its sounds are kept: when the player jumps to
+  // another step they are cut at once (no voice of the previous step
+  // talking over the next one). The music is never cut.
+  capture(on) {
+    this.capturing = on;
+    if (!on) this.captured = [];
+  }
+
+  keep(node, busName) {
+    if (this.capturing && busName !== "music") {
+      this.captured = (this.captured || []).filter((n) => !n.done);
+      this.captured.push(node);
+    }
+    return node;
+  }
+
+  cut() {
+    const g = this.graph;
+    for (const node of this.captured || []) {
+      try {
+        if (g) {
+          node.gain.cancelScheduledValues(g.ctx.currentTime);
+          node.gain.setTargetAtTime(0, g.ctx.currentTime, 0.02);
+        }
+        setTimeout(() => node.disconnect(), 200);
+      } catch {
+        // already gone
+      }
+      node.done = true;
+    }
+    this.captured = [];
+  }
+
+  // Pause: the whole sound (voices, effects, music) stops exactly where it
+  // is, and starts again from there.
+  hold(on) {
+    this.held = on;
+    const g = this.graph;
+    if (!g) return;
+    if (on) g.ctx.suspend().catch(() => {});
+    else if (!this.settings.muted || g.ctx.state === "suspended") g.ctx.resume().catch(() => {});
+  }
+
   // play("bell"), play("blip", { depth: 2, pan: -0.3 })
   play(name, opts = {}) {
     if (this.settings.muted) return;
@@ -589,9 +689,10 @@ class SoundBoard {
     this.last[name] = now;
     const ctx = this.context();
     if (!ctx) return;
-    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    if (ctx.state === "suspended" && !this.held) ctx.resume().catch(() => {});
     const [busName, vol, verb] = MIX[name] || ["sfx", 1, 0.2];
-    const out = voiceOut(this.graph, busName, { vol, verb, pan: opts.pan || 0 });
+    const gain = opts.gain === undefined ? 1 : opts.gain;
+    const out = this.keep(voiceOut(this.graph, busName, { vol: vol * gain, verb, pan: opts.pan || 0 }), busName);
     make(this.graph, out, ctx.currentTime + 0.01, opts, this.state);
     if (DUCK.has(name)) this.duck(name === "victory" || name === "levelup" ? 3 : 1.6);
   }
@@ -602,12 +703,12 @@ class SoundBoard {
     if (this.settings.muted) return;
     const ctx = this.context();
     if (!ctx) return;
-    if (ctx.state === "suspended") ctx.resume().catch(() => {});
+    if (ctx.state === "suspended" && !this.held) ctx.resume().catch(() => {});
     const letters = String(text).replace(/[^A-Za-zÀ-ÿ0-9]/g, "");
     const count = Math.max(2, Math.min(16, Math.round(letters.length / 3)));
     const pitch = profile.pitch || 180;
     const gap = profile.speed || 0.075;
-    const out = voiceOut(this.graph, "voice", { vol: 0.5, verb: 0.15, pan: opts.pan || 0 });
+    const out = this.keep(voiceOut(this.graph, "voice", { vol: 0.5, verb: 0.15, pan: opts.pan || 0 }), "voice");
     const vowels = Object.keys(VOWELS);
     let t = ctx.currentTime + 0.02;
     const question = /\?\s*$/.test(text);
