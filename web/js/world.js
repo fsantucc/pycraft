@@ -591,8 +591,17 @@ export class World {
             at = this.crierTop();
             this.crierSpeakAt = performance.now();
           }
-          this.effects = this.effects.filter((f) => !(f.kind === "bubble" && f.owner === (ev.oid || "crier")));
-          this.addEffect({ kind: "bubble", at, text: ev.text, dur: 2600, owner: ev.oid || "crier" });
+          // The bubble keeps the last printed lines (like a small chat log),
+          // so a long message is not replaced before it can be read.
+          const owner = ev.oid || "crier";
+          const prev = this.effects.find((f) => f.kind === "bubble" && f.owner === owner);
+          const lines = prev ? [...prev.text.split("\n"), ev.text] : [ev.text];
+          const kept = lines.slice(-5);
+          const text = kept.join("\n");
+          const old = kept.slice(0, -1).join("\n");
+          const revealFrom = prev ? old.length + (old ? 1 : 0) : 0;
+          this.effects = this.effects.filter((f) => !(f.kind === "bubble" && f.owner === owner));
+          this.addEffect({ kind: "bubble", at, text, revealFrom, dur: Math.min(10000, 2600 + ev.text.length * 45), owner });
           break;
         }
         case "var_set": {
@@ -623,7 +632,7 @@ export class World {
           const at = this.crierTop();
           this.crierSpeakAt = performance.now();
           this.effects = this.effects.filter((f) => !(f.kind === "bubble" && f.owner === "crier"));
-          this.addEffect({ kind: "bubble", at, text: `❓ ${ev.prompt.trim()}`, dur: 1800, owner: "crier", question: true });
+          this.addEffect({ kind: "bubble", at, text: `❓ ${ev.prompt.trim()}`, dur: Math.min(6000, 1800 + ev.prompt.length * 40), owner: "crier", question: true });
           this.addEffect({ kind: "float", at, text: `⌨ "${ev.value}"`, color: "#ffe7a0", dur: 1900, rise: 0.5 });
           break;
         }
@@ -1427,13 +1436,11 @@ export class World {
         c.globalAlpha = 1;
       } else if (f.kind === "bubble") {
         const [x, y] = f.at();
-        c.globalAlpha = t > 0.85 ? (1 - t) / 0.15 : 1;
-        const pop = t < 0.08 ? 0.6 + 5 * t : 1;
-        c.save();
-        c.translate(x, y);
-        c.scale(pop, pop);
-        speechBubble(c, 0, 0, f.text, t, f.question ? { bg: "#fff4cc", border: "#8a5a10" } : {});
-        c.restore();
+        const pop = t < 0.04 ? 0.7 + 7.5 * t : 1;
+        c.globalAlpha = t > 0.88 ? (1 - t) / 0.12 : Math.min(1, pop);
+        const shown = (f.revealFrom || 0) + (now - f.t0) / 22;
+        const reveal = shown / Math.max(1, f.text.length) / 2.2;
+        speechBubble(c, x, y - (1 - pop) * 10, f.text, reveal, f.question ? { bg: "#fff4cc", border: "#8a5a10" } : {});
         c.globalAlpha = 1;
       } else if (f.kind === "beam") {
         this.drawBeam(f, t, now);

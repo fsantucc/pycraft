@@ -67,19 +67,53 @@ export function nameTag(c, x, y, text, opts = {}) {
   return { x: left, y: top, w, h };
 }
 
-// Speech bubble with a tail and a typewriter reveal.
+// Cut a text into lines that fit maxWidth (words are kept whole when
+// possible, very long words are split).
+export function wrapText(c, text, maxWidth, maxLines = 8) {
+  const lines = [];
+  for (const raw of String(text).split("\n")) {
+    let line = "";
+    for (const word of raw.split(/(\s+)/)) {
+      if (c.measureText(line + word).width <= maxWidth) {
+        line += word;
+        continue;
+      }
+      if (line.trim()) lines.push(line.trimEnd());
+      line = word.trimStart();
+      while (c.measureText(line).width > maxWidth) {
+        let cut = line.length - 1;
+        while (cut > 1 && c.measureText(line.slice(0, cut)).width > maxWidth) cut -= 1;
+        lines.push(line.slice(0, cut));
+        line = line.slice(cut);
+      }
+    }
+    lines.push(line);
+  }
+  if (lines.length > maxLines) {
+    const kept = lines.slice(0, maxLines);
+    kept[maxLines - 1] = `${kept[maxLines - 1].slice(0, -1)}…`;
+    return kept;
+  }
+  return lines;
+}
+
+// Speech bubble with a tail and a typewriter reveal. Long texts wrap on
+// several lines instead of being cut.
 export function speechBubble(c, x, y, text, progress, style = {}) {
-  const shown = text.slice(0, Math.ceil(text.length * Math.min(1, progress * 2.2)));
   c.font = "12px ui-monospace, Menlo, Consolas, monospace";
-  const full = Math.min(320, c.measureText(text).width + 20);
-  const h = 26;
-  const left = x - full / 2;
-  const top = y - h - 14;
+  const lines = wrapText(c, text, 300, 10);
+  const lineH = 16;
+  const w = Math.max(40, ...lines.map((l) => c.measureText(l).width)) + 20;
+  const h = lines.length * lineH + 10;
+  const screenW = c.canvas.clientWidth || c.canvas.width;
+  const left = Math.max(4, Math.min(screenW - w - 4, x - w / 2));
+  const top = Math.max(4, y - h - 14);
+  const tailX = Math.max(left + 12, Math.min(left + w - 12, x));
   c.save();
   c.shadowColor = "rgba(0,0,0,0.35)";
   c.shadowBlur = 8;
   c.shadowOffsetY = 3;
-  roundRect(c, left, top, full, h, 8);
+  roundRect(c, left, top, w, h, 8);
   c.fillStyle = style.bg || "#fffdf5";
   c.fill();
   c.shadowColor = "transparent";
@@ -87,24 +121,28 @@ export function speechBubble(c, x, y, text, progress, style = {}) {
   c.lineWidth = 2;
   c.stroke();
   c.beginPath();
-  c.moveTo(x - 7, top + h - 1);
-  c.lineTo(x, top + h + 10);
-  c.lineTo(x + 7, top + h - 1);
+  c.moveTo(tailX - 7, top + h - 1);
+  c.lineTo(tailX, top + h + 10);
+  c.lineTo(tailX + 7, top + h - 1);
   c.closePath();
   c.fillStyle = style.bg || "#fffdf5";
   c.fill();
   c.beginPath();
-  c.moveTo(x - 7, top + h);
-  c.lineTo(x, top + h + 10);
-  c.lineTo(x + 7, top + h);
+  c.moveTo(tailX - 7, top + h);
+  c.lineTo(tailX, top + h + 10);
+  c.lineTo(tailX + 7, top + h);
   c.stroke();
   c.fillStyle = style.color || "#241a10";
   c.textBaseline = "middle";
   c.textAlign = "left";
-  let label = shown;
-  while (c.measureText(label).width > full - 16 && label.length > 3) label = label.slice(0, -2);
-  if (label !== shown) label += "…";
-  c.fillText(label, left + 10, top + h / 2 + 0.5);
+  // Typewriter: reveal the characters line after line.
+  const total = lines.reduce((n, l) => n + l.length, 0);
+  let budget = Math.ceil(total * Math.min(1, progress * 2.2));
+  lines.forEach((line, i) => {
+    if (budget <= 0) return;
+    c.fillText(line.slice(0, budget), left + 10, top + 5 + lineH * i + lineH / 2 + 0.5);
+    budget -= line.length;
+  });
   c.restore();
 }
 
