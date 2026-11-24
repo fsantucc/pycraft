@@ -128,6 +128,7 @@ export class World {
   // Camera: automatically frames what exists (plans, objects, signs),
   // then the user can zoom / pan on top of it.
   origin() {
+    if (this.fixedOrigin) return this.fixedOrigin;
     const k = this.cam.k * this.zoom;
     let sx = 0;
     let sy = 0;
@@ -746,6 +747,9 @@ export class World {
   texturedFace(pts, color, n, seed) {
     const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
     const at = (u, v) => lerp(lerp(pts[0], pts[1], u), lerp(pts[3], pts[2], u), v);
+    // Base fill first: the tiny anti-aliased seams between the cells then
+    // show the face color instead of dark lines.
+    this.poly(pts, color);
     for (let i = 0; i < n; i += 1) {
       for (let j = 0; j < n; j += 1) {
         const f = 0.9 + hash(seed, i, j) * 0.18;
@@ -898,9 +902,9 @@ export class World {
     drawables.forEach((d) => d.fn());
 
     this.particles.draw(c, this.dt || 0.016);
+    this.labelRects = [];
     this.drawInheritance(now);
     this.drawLinks(now);
-    this.labelRects = [];
     this.drawLabels(now);
     this.drawCollectionLabels(now);
     this.drawStackLabels();
@@ -955,39 +959,46 @@ export class World {
     }
   }
 
-  // The ground is expensive (thousands of textured cells): it is drawn
-  // plainly while the camera moves, then cached once the camera is still.
+  // The ground is expensive (thousands of textured cells). It is rendered
+  // once per theme and rotation, at a fixed scale, into an offscreen
+  // canvas. The isometric projection is just a scale + a translation, so
+  // each frame only has to draw that image at the right place: the ground
+  // stays textured and stable even while the camera moves or shakes.
   drawGround() {
+    // Resolution of the cached image: just enough for the current zoom and
+    // screen density (2 to 4), so it stays sharp without using too much memory.
     const dpr = window.devicePixelRatio || 1;
-    const key = [this.cam.k.toFixed(3), this.cam.u.toFixed(1), this.cam.v.toFixed(1), this.zoom.toFixed(3),
-      Math.round(this.pan.x), Math.round(this.pan.y), this.rot, this.width, this.height, this.themeName].join("|");
-    const shaking = performance.now() < this.shake.until;
-    if (key !== this.groundKey) {
-      this.groundKey = key;
-      this.stableFrames = 0;
-      this.groundReady = false;
-    } else {
-      this.stableFrames += 1;
-    }
-    if (this.groundReady && !shaking) {
-      this.ctx.drawImage(this.groundCache, 0, 0, this.width, this.height);
-      return;
-    }
-    if (this.stableFrames >= 2 && !shaking) {
+    const K0 = Math.min(4, Math.max(2, Math.ceil(this.cam.k * this.zoom * dpr)));
+    const pad = 12;
+    const key = `${this.rot}|${this.themeName}|${K0}`;
+    if (key !== this.groundKey || !this.groundReady) {
       const cache = this.groundCache;
-      cache.width = this.width * dpr;
-      cache.height = this.height * dpr;
+      const gw = Math.ceil((W + D) * (TW / 2) * K0 + pad * 2);
+      const gh = Math.ceil(((W + D) * (TH / 2) + 3 * BH) * K0 + pad * 2);
+      cache.width = gw;
+      cache.height = gh;
       const cctx = cache.getContext("2d");
-      cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cctx.clearRect(0, 0, gw, gh);
+      this.groundOrigin = [D * (TW / 2) * K0 + pad, 0.6 * BH * K0 + pad];
       const main = this.ctx;
       this.ctx = cctx;
-      this.renderGround(true);
-      this.ctx = main;
+      this.fixedOrigin = [this.groundOrigin[0], this.groundOrigin[1], K0];
+      try {
+        this.renderGround(true);
+      } finally {
+        this.fixedOrigin = null;
+        this.ctx = main;
+      }
+      this.groundKey = key;
       this.groundReady = true;
-      this.ctx.drawImage(cache, 0, 0, this.width, this.height);
-      return;
     }
-    this.renderGround(false);
+    const [ox, oy, k] = this.origin();
+    const scale = k / K0;
+    const c = this.ctx;
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = "high";
+    c.drawImage(this.groundCache, ox - this.groundOrigin[0] * scale, oy - this.groundOrigin[1] * scale,
+      this.groundCache.width * scale, this.groundCache.height * scale);
   }
 
   renderGround(detailed) {
@@ -1136,13 +1147,16 @@ export class World {
     const shake = now - b.hit < 400 ? Math.sin(now / 20) * 0.15 : 0;
     const float = Math.sin(now / 500) * 0.1;
     const { parts } = buildParts(b.model, {}, {});
-    parts.forEach((p, pi) => {
-      const [bx, by] = SD(14, 11.5);
-      list.push({ d: this.depthOf(bx + p.x * 2, by + p.y * 2, p.z), fn: () => {
+    const [bx, by] = SD(14, 11.5);
+    // Drawn as one block (parts ordered inside it) so they never flicker.
+    list.push({ d: this.depthOf(bx + 1, by + 1, 0), fn: () => {
+      const key = (p) => this.depthOf(p.x + p.w / 2, p.y + p.d / 2, p.z);
+      const sorted = parts.map((p, pi) => ({ ...p, pi })).sort((a, b) => key(a) - key(b) || a.pi - b.pi);
+      for (const p of sorted) {
         this.box(bx - 0.4 + shake + p.x * 1.8, by - 0.4 + p.y * 1.8, p.z * 1.8 + float, p.w * 1.8, p.d * 1.8, p.h * 1.8,
-          now - b.hit < 300 ? "#ff5040" : p.c, 1, "rgba(0,0,0,0.3)", 2, pi * 3.7);
-      } });
-    });
+          now - b.hit < 300 ? "#ff5040" : p.c, 1, "rgba(0,0,0,0.3)", 2, p.pi * 3.7);
+      }
+    } });
   }
 
   drawOverlay(now) {
@@ -1229,7 +1243,7 @@ export class World {
         c.lineTo(x2 - 13 * Math.cos(ang - 0.45), y2 - 13 * Math.sin(ang - 0.45));
         c.lineTo(x2 - 13 * Math.cos(ang + 0.45), y2 - 13 * Math.sin(ang + 0.45));
         c.fill();
-        this.tag(mx, my + 22, "hérite de", "#f2c14e", 9, null, { icon: "🧬", collide: false });
+        this.tag(mx, my + 22, "hérite de", "#f2c14e", 9, null, { icon: "🧬" });
       }
     }
   }
@@ -1275,12 +1289,18 @@ export class World {
     }
     const rect = nameTag(c, x, top, text, { color, size, bg: bg || undefined, ...opts });
     if (opts.collide !== false) this.labelRects.push(rect);
+    this.lastTag = rect;
     return rect.w;
   }
 
   drawLabels(now) {
     const c = this.ctx;
     const k = this.cam.k * this.zoom;
+    // The crier's caption is placed first, under his stage: the other tags
+    // move away from it instead of pushing it over him.
+    const [cx, cy] = this.crierPos();
+    const [lx, ly] = this.project(cx + 0.5, cy + 0.5, 0);
+    this.tag(lx, ly + 30, "Crieur public · affiche tes print()", "#ffe7a0", 9, "rgba(90,25,20,0.88)", { icon: "📢", border: "#f2c14e" });
     const [zx, zy] = this.project(...SD(10.5, 12), 0);
     if (this.blueprints.size || this.entities.size) {
       this.tag(zx, zy - 4, "PLANS (classes)", "#7fe9f0", 10, null, { icon: "▲", accent: "#5ee6e0", collide: false });
@@ -1297,13 +1317,15 @@ export class World {
       const label = ent.owner ? `${(ent.names[0] || "").split(".").pop()} : ${short}` : name ? `${name} : ${ent.cls}` : `objet ${ent.cls}`;
       const ly = y - 6 - (ent.labelShift || 0);
       const hpOffset = ent.hp && !ent.owner ? 12 : 0;
-      this.tag(x, ly - hpOffset, label, sel ? "#f2c14e" : "#ffffff", ent.scale < 1 ? 9 : 11, null,
+      this.tag(x, ly - hpOffset + 2, label, sel ? "#f2c14e" : "#ffffff", ent.scale < 1 ? 9 : 11, null,
         { icon: ent.owner ? "↳" : isError ? "💣" : "🧍", accent: hashColorOf(ent.cls), border: sel ? "#f2c14e" : null });
       if (hpOffset) {
         const max = Math.max(ent.hpMax || ent.hp.value, 1);
         const ratio = Math.max(0, Math.min(1, ent.hp.value / max));
         const bw = 52 * Math.max(0.8, k);
-        const by = ly - 8;
+        // Right under the name tag, even when the tag had to move up.
+        const by = this.lastTag.y + this.lastTag.h + 2;
+        this.labelRects.push({ x: x - bw / 2, y: by, w: bw + 50, h: 9 });
         roundRect(c, x - bw / 2, by, bw, 8, 3);
         c.fillStyle = "rgba(0,0,0,0.75)";
         c.fill();
@@ -1334,9 +1356,6 @@ export class World {
       this.tag(x, y, label, fresh ? "#2b1d0e" : "#fff3d0", 10, fresh ? "rgba(242,193,78,0.95)" : "rgba(110,72,36,0.92)",
         { icon: "🪧", border: "#3b2410" });
     }
-    const [cx, cy] = this.crierPos();
-    const [lx, ly] = this.project(cx + 0.5, cy + 0.5, 0);
-    this.tag(lx, ly + 30, "Crieur public · affiche tes print()", "#ffe7a0", 9, "rgba(90,25,20,0.88)", { icon: "📢", border: "#f2c14e" });
     if (now - this.crierSpeakAt < 900) {
       const [bx, by] = this.project(cx + 1.0, cy + 0.5, 2.6);
       c.strokeStyle = "rgba(255,231,160,0.85)";
