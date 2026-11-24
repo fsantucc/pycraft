@@ -107,7 +107,8 @@ export function speechBubble(c, x, y, text, progress, style = {}) {
   const h = lines.length * lineH + 10;
   const screenW = c.canvas.clientWidth || c.canvas.width;
   const left = Math.max(4, Math.min(screenW - w - 4, x - w / 2));
-  const top = Math.max(4, y - h - 14);
+  const tail = style.tail !== false;
+  const top = Math.max(4, y - h - (tail ? 14 : 0));
   const tailX = Math.max(left + 12, Math.min(left + w - 12, x));
   c.save();
   c.shadowColor = "rgba(0,0,0,0.35)";
@@ -120,6 +121,7 @@ export function speechBubble(c, x, y, text, progress, style = {}) {
   c.strokeStyle = style.border || "#2b2118";
   c.lineWidth = 2;
   c.stroke();
+  if (tail) {
   c.beginPath();
   c.moveTo(tailX - 7, top + h - 1);
   c.lineTo(tailX, top + h + 10);
@@ -132,6 +134,7 @@ export function speechBubble(c, x, y, text, progress, style = {}) {
   c.lineTo(tailX, top + h + 10);
   c.lineTo(tailX + 7, top + h);
   c.stroke();
+  }
   c.fillStyle = style.color || "#241a10";
   c.textBaseline = "middle";
   c.textAlign = "left";
@@ -144,6 +147,7 @@ export function speechBubble(c, x, y, text, progress, style = {}) {
     budget -= line.length;
   });
   c.restore();
+  return { top, h };
 }
 
 // Pixel particle system (screen space, anchored to world points).

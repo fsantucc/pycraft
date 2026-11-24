@@ -43,23 +43,138 @@ function shadeColor(hex, f) {
 }
 
 // The town crier: a villager in a red and gold robe, with a hat and a bell.
-export function crierParts(ringing) {
-  const parts = humanoid({ head: "#d4a373", body: "#a8322a", legs: "#5a2a20", arms: "#8c2a22", nose: true });
-  const L = 0.75;
-  parts.push(
-    B(0.18, 0.2, L + 1.25, 0.64, 0.6, 0.08, "#2b2118", "head"),
-    B(0.3, 0.32, L + 1.33, 0.4, 0.36, 0.22, "#2b2118", "head"),
-    B(0.31, 0.33, L + 1.36, 0.38, 0.34, 0.05, "#f2c14e", "head"),
-    B(0.22, 0.672, L + 0.1, 0.56, 0.01, 0.6, "#f2c14e", "body"),
-    B(0.22, 0.673, L + 0.5, 0.56, 0.01, 0.08, "#2b2118", "body"),
-  );
-  const arm = parts.find((p) => p.role === "armR");
-  if (ringing) {
-    arm.z += 0.55;
-    arm.h = 0.6;
+// The town crier: tricorne, white wig, blue coat with gold buttons, red
+// mantle, a bell in the right hand and a scroll in the left one. He takes a
+// different pose for each kind of intervention:
+// idle, speak (print), ask (input), read (import), call (function call),
+// alert (exception raised) and cheer (exception caught).
+export function crierParts(pose = "idle", t = 0) {
+  const L = 0.7;
+  const coat = "#2c4fa8";
+  const gold = "#f2c14e";
+  const red = "#a8322a";
+  const skin = "#e8b48a";
+  const wig = "#f1efe8";
+  const hat = "#1e1a22";
+  const parts = [];
+  const add = (x, y, z, w, d, h, c, role = "body") => parts.push(B(x, y, z, w, d, h, c, role));
+  const hop = pose === "speak" ? Math.abs(Math.sin(t / 110)) * 0.08
+    : pose === "cheer" ? Math.abs(Math.sin(t / 140)) * 0.16
+      : pose === "alert" ? 0 : Math.sin(t / 650) * 0.012;
+  const shake = pose === "alert" ? Math.sin(t / 30) * 0.03 : 0;
+  const lookX = pose === "idle" ? Math.sin(t / 2300) * 0.025 : 0;
+
+  // Legs: white breeches and brown boots (one step forward when he hops).
+  const step = pose === "speak" || pose === "cheer" ? Math.sin(t / 110) * 0.05 : 0;
+  add(0.25, 0.37 + step, 0.28, 0.22, 0.26, L - 0.28, "#d8ccad", "legL");
+  add(0.53, 0.37 - step, 0.28, 0.22, 0.26, L - 0.28, "#d8ccad", "legR");
+  add(0.24, 0.36 + step, 0, 0.24, 0.3, 0.3, "#4a2c17", "legL");
+  add(0.52, 0.36 - step, 0, 0.24, 0.3, 0.3, "#4a2c17", "legR");
+  add(0.24, 0.6 + step, 0, 0.24, 0.08, 0.08, "#2e1a0c", "legL");
+  add(0.52, 0.6 - step, 0, 0.24, 0.08, 0.08, "#2e1a0c", "legR");
+
+  // Coat with tails, belt, buttons, white jabot and a red mantle.
+  const bz = L + hop;
+  add(0.19 + shake, 0.3, bz - 0.36, 0.62, 0.4, 0.4, shadeColor(coat, 0.85));
+  add(0.189 + shake, 0.699, bz - 0.36, 0.622, 0.002, 0.05, gold);
+  add(0.2 + shake, 0.32, bz, 0.6, 0.36, 0.78, coat);
+  add(0.199 + shake, 0.31, bz + 0.06, 0.602, 0.38, 0.08, "#3a2414");
+  add(0.45 + shake, 0.692, bz + 0.05, 0.1, 0.01, 0.1, gold);
+  for (const z of [0.28, 0.42, 0.56]) add(0.47 + shake, 0.681, bz + z, 0.06, 0.01, 0.06, gold);
+  add(0.41 + shake, 0.682, bz + 0.6, 0.18, 0.012, 0.18, "#ffffff");
+  add(0.17 + shake, 0.29, bz + 0.66, 0.66, 0.42, 0.12, red);
+  add(0.17 + shake, 0.709, bz + 0.66, 0.66, 0.003, 0.03, gold);
+
+  // Head, wig, face.
+  const hz = bz + 0.78;
+  const hx = 0.25 + shake + lookX;
+  const wide = pose === "alert";
+  const talking = pose === "speak" || pose === "ask" || pose === "alert" || pose === "cheer";
+  const mouthOpen = talking ? 0.03 + Math.abs(Math.sin(t / 70)) * 0.07 : 0.025;
+  add(hx, 0.27, hz, 0.5, 0.48, 0.48, skin, "head");
+  add(hx - 0.04, 0.24, hz + 0.06, 0.06, 0.26, 0.36, wig, "head");
+  add(hx + 0.48, 0.24, hz + 0.06, 0.06, 0.26, 0.36, wig, "head");
+  add(hx - 0.04, 0.22, hz + 0.02, 0.58, 0.08, 0.42, wig, "head");
+  add(hx + 0.49, 0.3, hz - 0.02, 0.08, 0.14, 0.12, wig, "head");
+  add(hx - 0.05, 0.3, hz - 0.02, 0.08, 0.14, 0.12, wig, "head");
+  add(hx + 0.501, 0.5, hz + 0.24, 0.01, 0.08, 0.1, "#2b2b5a", "eye");
+  add(hx + 0.05, 0.752, hz + 0.27, 0.13, 0.01, wide ? 0.13 : 0.09, "#ffffff", "eye");
+  add(hx + 0.32, 0.752, hz + 0.27, 0.13, 0.01, wide ? 0.13 : 0.09, "#ffffff", "eye");
+  add(hx + 0.1, 0.754, hz + 0.28, 0.06, 0.01, 0.07, "#2b2b5a", "eye");
+  add(hx + 0.37, 0.754, hz + 0.28, 0.06, 0.01, 0.07, "#2b2b5a", "eye");
+  add(hx + 0.04, 0.753, hz + (wide ? 0.43 : 0.39), 0.15, 0.01, 0.035, "#6b3f1f", "head");
+  add(hx + 0.31, 0.753, hz + (wide ? 0.43 : 0.39), 0.15, 0.01, 0.035, "#6b3f1f", "head");
+  add(hx + 0.2, 0.75, hz + 0.16, 0.1, 0.07, 0.12, shadeColor(skin, 0.86), "head");
+  add(hx + 0.09, 0.756, hz + 0.12, 0.32, 0.015, 0.05, "#6b3f1f", "head");
+  add(hx + 0.17, 0.753, hz + 0.1 - mouthOpen, 0.16, 0.01, mouthOpen, "#5a1a1a", "mouth");
+  add(hx + 0.05, 0.751, hz + 0.12, 0.08, 0.01, 0.05, "#f2a08a", "head");
+  add(hx + 0.37, 0.751, hz + 0.12, 0.08, 0.01, 0.05, "#f2a08a", "head");
+
+  // Tricorne hat with gold trim and a red feather.
+  const tz = hz + 0.46 + (pose === "cheer" ? Math.abs(Math.sin(t / 140)) * 0.05 : 0);
+  add(hx - 0.11, 0.18, tz, 0.72, 0.7, 0.08, hat, "hat");
+  add(hx - 0.11, 0.879, tz, 0.72, 0.012, 0.08, gold, "hat");
+  add(hx + 0.609, 0.18, tz, 0.012, 0.7, 0.08, gold, "hat");
+  add(hx + 0.03, 0.3, tz + 0.08, 0.44, 0.44, 0.2, hat, "hat");
+  add(hx + 0.03, 0.741, tz + 0.08, 0.44, 0.01, 0.05, gold, "hat");
+  add(hx + 0.4, 0.34, tz + 0.2, 0.05, 0.26, 0.26, "#e5534b", "hat");
+  add(hx + 0.41, 0.52, tz + 0.4, 0.04, 0.12, 0.08, "#ff8a7a", "hat");
+
+  // Arms. Each returns the position of the hand.
+  const arm = (side, mode) => {
+    const x = (side === "L" ? 0.02 : 0.8) + shake;
+    const role = side === "L" ? "armL" : "armR";
+    if (mode === "up") {
+      const wave = Math.sin(t / 90) * 0.03;
+      add(x + wave, 0.38, bz + 0.66, 0.18, 0.24, 0.62, coat, role);
+      add(x + wave - 0.005, 0.375, bz + 1.22, 0.19, 0.25, 0.08, gold, role);
+      add(x + wave + 0.02, 0.4, bz + 1.3, 0.14, 0.2, 0.14, skin, role);
+      return [x + wave + 0.09, 0.5, bz + 1.44];
+    }
+    if (mode === "forward") {
+      add(x, 0.38, bz + 0.5, 0.18, 0.62, 0.2, coat, role);
+      add(x - 0.005, 0.99, bz + 0.495, 0.19, 0.06, 0.21, gold, role);
+      add(x + 0.02, 1.05, bz + 0.52, 0.14, 0.14, 0.16, skin, role);
+      return [x + 0.09, 1.12, bz + 0.6];
+    }
+    const swing = pose === "idle" ? Math.sin(t / 900 + (side === "L" ? 0 : 2)) * 0.02 : 0;
+    add(x, 0.38 + swing, bz + 0.12, 0.18, 0.24, 0.62, coat, role);
+    add(x - 0.005, 0.375 + swing, bz + 0.1, 0.19, 0.25, 0.08, gold, role);
+    add(x + 0.02, 0.4 + swing, bz - 0.02, 0.14, 0.2, 0.13, skin, role);
+    return [x + 0.09, 0.5 + swing, bz - 0.02];
+  };
+  const modes = {
+    idle: ["down", "down"], speak: ["down", "up"], ask: ["forward", "down"], read: ["forward", "down"],
+    call: ["down", "forward"], alert: ["up", "up"], cheer: ["up", "up"],
+  }[pose] || ["down", "down"];
+  const handL = arm("L", modes[0]);
+  const handR = arm("R", modes[1]);
+
+  // Bell in the right hand (rings when he speaks).
+  const ring = pose === "speak" || pose === "cheer" ? Math.sin(t / 55) * 0.06 : 0;
+  const [bx, by, bzz] = handR;
+  if (modes[1] === "up") {
+    add(bx - 0.03, by - 0.03, bzz - 0.02, 0.06, 0.06, 0.14, "#6b4527", "bell");
+    add(bx - 0.1 + ring, by - 0.1, bzz + 0.12, 0.2, 0.2, 0.06, shadeColor(gold, 0.8), "bell");
+    add(bx - 0.08 + ring, by - 0.08, bzz + 0.18, 0.16, 0.16, 0.12, gold, "bell");
+    add(bx - 0.04 + ring, by - 0.04, bzz + 0.3, 0.08, 0.08, 0.05, "#ffe9a0", "bell");
+  } else {
+    add(bx - 0.03, by - 0.03, bzz - 0.12, 0.06, 0.06, 0.12, "#6b4527", "bell");
+    add(bx - 0.08, by - 0.08, bzz - 0.3, 0.16, 0.16, 0.18, gold, "bell");
+    add(bx - 0.1, by - 0.1, bzz - 0.33, 0.2, 0.2, 0.05, shadeColor(gold, 0.8), "bell");
   }
-  parts.push(B(0.86, 0.42, arm.z + arm.h - 0.05, 0.16, 0.16, 0.18, "#f2c14e", "bell"),
-    B(0.9, 0.46, arm.z + arm.h + 0.12, 0.08, 0.08, 0.08, "#7a5a1a", "bell"));
+
+  // Scroll in the left hand: rolled, or open in front of him to read.
+  const [sx, sy, sz] = handL;
+  if (modes[0] === "forward") {
+    add(sx - 0.05, sy + 0.04, sz - 0.42, 0.6, 0.02, 0.5, "#f5ecd7", "scroll");
+    add(sx - 0.08, sy + 0.03, sz + 0.06, 0.66, 0.05, 0.06, "#c9a86a", "scroll");
+    add(sx - 0.08, sy + 0.03, sz - 0.46, 0.66, 0.05, 0.06, "#c9a86a", "scroll");
+    for (let i = 0; i < 4; i += 1) add(sx + 0.04, sy + 0.061, sz - 0.04 - i * 0.1, 0.42 - (i % 2) * 0.12, 0.005, 0.03, "#7a5a3a", "scroll");
+  } else if (modes[0] === "down") {
+    add(sx - 0.06, sy - 0.18, sz - 0.08, 0.12, 0.36, 0.12, "#f5ecd7", "scroll");
+    add(sx - 0.065, sy - 0.02, sz - 0.085, 0.13, 0.04, 0.13, red, "scroll");
+  }
   return parts;
 }
 

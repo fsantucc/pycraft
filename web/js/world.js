@@ -91,6 +91,7 @@ export class World {
     this.groundReady = false;
     this.stableFrames = 0;
     this.crierSpeakAt = 0;
+    this.crierAct = null;
     this.nextAmbient = 0;
     this.labelRects = [];
     this.clouds = Array.from({ length: 7 }, (_, i) => ({
@@ -418,6 +419,12 @@ export class World {
     return SD(7, -6);
   }
 
+  // Make the crier react: speak, ask, read, call, alert or cheer.
+  crierDo(pose, dur = 1400) {
+    this.crierAct = { pose, t0: performance.now(), dur };
+    if (pose === "speak" || pose === "ask") this.crierSpeakAt = performance.now();
+  }
+
   crierTop() {
     const [x, y] = this.crierPos();
     return () => this.project(x + 0.5, y + 0.5, 3.0);
@@ -574,6 +581,7 @@ export class World {
         }
         case "func_call": {
           const at = this.crierTop();
+          this.crierDo("call", 1200);
           this.addEffect({ kind: "float", at, text: `fonction ${ev.name}()`, color: "#ffe7a0", dur: 1500 });
           for (const [, value] of ev.args || []) {
             if (value && value.t === "obj") {
@@ -589,19 +597,22 @@ export class World {
           else if (ev.oid) at = this.entityTop(ev.oid);
           if (!at) {
             at = this.crierTop();
-            this.crierSpeakAt = performance.now();
+            this.crierDo("speak", Math.min(4000, 1200 + ev.text.length * 30));
           }
-          // The bubble keeps the last printed lines (like a small chat log),
-          // so a long message is not replaced before it can be read.
+          // One bubble per print(). Lines of the same string
+          // (print("a\nb")) stay together; older bubbles pile up above.
           const owner = ev.oid || "crier";
-          const prev = this.effects.find((f) => f.kind === "bubble" && f.owner === owner);
-          const lines = prev ? [...prev.text.split("\n"), ev.text] : [ev.text];
-          const kept = lines.slice(-5);
-          const text = kept.join("\n");
-          const old = kept.slice(0, -1).join("\n");
-          const revealFrom = prev ? old.length + (old ? 1 : 0) : 0;
-          this.effects = this.effects.filter((f) => !(f.kind === "bubble" && f.owner === owner));
-          this.addEffect({ kind: "bubble", at, text, revealFrom, dur: Math.min(10000, 2600 + ev.text.length * 45), owner });
+          const mine = this.effects.filter((f) => f.kind === "bubble" && f.owner === owner);
+          const last = mine[mine.length - 1];
+          if (ev.cont && last && !last.question) {
+            last.revealFrom = last.text.length + 1;
+            last.text += `\n${ev.text}`;
+            last.t0 = performance.now();
+            last.dur = Math.min(10000, 2600 + last.text.length * 45);
+            break;
+          }
+          if (mine.length >= 3) this.effects = this.effects.filter((f) => f !== mine[0]);
+          this.addEffect({ kind: "bubble", at, text: ev.text, revealFrom: 0, dur: Math.min(10000, 3200 + ev.text.length * 45), owner });
           break;
         }
         case "var_set": {
@@ -613,6 +624,7 @@ export class World {
         }
         case "raise": {
           const at = (ev.oid && this.entityTop(ev.oid)) || this.stackTop() || this.crierTop();
+          this.crierDo("alert", 1500);
           this.addEffect({ kind: "bolt", at, dur: 1300 });
           this.addEffect({ kind: "float", at, text: `⚡ ${ev.etype}`, color: "#ff8a80", dur: 1800 });
           break;
@@ -624,14 +636,14 @@ export class World {
         }
         case "caught": {
           const at = this.stackTop() || this.crierTop();
+          this.crierDo("cheer", 1600);
           this.addEffect({ kind: "net", at, dur: 1600 });
           this.addEffect({ kind: "float", at, text: `🥅 ${ev.etype} attrapée`, color: "#b8f36b", dur: 1800 });
           break;
         }
         case "input": {
           const at = this.crierTop();
-          this.crierSpeakAt = performance.now();
-          this.effects = this.effects.filter((f) => !(f.kind === "bubble" && f.owner === "crier"));
+          this.crierDo("ask", 2600);
           this.addEffect({ kind: "bubble", at, text: `❓ ${ev.prompt.trim()}`, dur: Math.min(6000, 1800 + ev.prompt.length * 40), owner: "crier", question: true });
           this.addEffect({ kind: "float", at, text: `⌨ "${ev.value}"`, color: "#ffe7a0", dur: 1900, rise: 0.5 });
           break;
@@ -643,11 +655,13 @@ export class World {
           break;
         }
         case "module_start":
+          this.crierDo("read", 1800);
           this.addEffect({ kind: "float", at: this.crierTop(), text: `📦 import ${ev.name}`, color: "#ffe7a0", dur: 2000 });
           break;
         case "error": {
           const last = [...this.entities.keys()].pop();
           const at = (last && this.entityTop(last)) || this.crierTop();
+          this.crierDo("alert", 2200);
           this.addEffect({ kind: "explosion", at, dur: 1400 });
           break;
         }
@@ -884,6 +898,7 @@ export class World {
     this.drawCollectionLabels(now);
     this.drawStackLabels();
     this.drawEffects(now);
+    this.drawBubbles(now);
     this.drawOverlay(now);
   }
 
@@ -1080,16 +1095,19 @@ export class World {
     // The town crier on his stage: everything printed outside of any object
     // comes out of his mouth.
     const [cx, cy] = this.crierPos();
-    const ringing = now - this.crierSpeakAt < 900;
+    const act = this.crierAct;
+    const pose = act && now - act.t0 < act.dur ? act.pose : "idle";
+    // A little jump when a new intervention starts.
+    const start = act && pose !== "idle" ? Math.max(0, 1 - (now - act.t0) / 260) : 0;
+    const jump = Math.sin(start * Math.PI) * 0.18;
     list.push({ d: this.depthOf(cx + 0.5, cy + 0.5, 0), fn: () => {
       this.box(cx - 0.2, cy - 0.2, 0, 1.4, 1.4, 0.3, "#8a5a2b", 1, "rgba(0,0,0,0.3)", 3);
       this.box(cx - 0.25, cy - 0.25, 0.3, 1.5, 1.5, 0.05, "#a8322a", 1, null);
+      this.box(cx - 0.251, cy + 1.249, 0.22, 1.502, 0.002, 0.08, "#f2c14e", 1, null);
     } });
-    const bob = ringing ? Math.abs(Math.sin(now / 90)) * 0.06 : Math.sin(now / 700) * 0.015;
-    for (const p of crierParts(ringing)) {
+    for (const p of crierParts(pose, now)) {
       list.push({ d: this.depthOf(cx + p.x + p.w / 2, cy + p.y + p.d / 2, p.z + 0.35), fn: () => {
-        const swing = p.role === "bell" && ringing ? Math.sin(now / 60) * 0.05 : 0;
-        this.box(cx + p.x + swing, cy + p.y, 0.35 + p.z + bob, p.w, p.d, p.h, p.c, 1, "rgba(0,0,0,0.25)", p.w * p.h > 0.12 ? 2 : 0);
+        this.box(cx + p.x, cy + p.y, 0.35 + p.z + jump, p.w, p.d, p.h, p.c, 1, "rgba(0,0,0,0.25)", p.w * p.h > 0.12 ? 2 : 0);
       } });
     }
     list.push({ d: this.depthOf(cx - 0.6, cy + 0.9, 0), fn: () => {
@@ -1435,13 +1453,7 @@ export class World {
         c.textAlign = "left";
         c.globalAlpha = 1;
       } else if (f.kind === "bubble") {
-        const [x, y] = f.at();
-        const pop = t < 0.04 ? 0.7 + 7.5 * t : 1;
-        c.globalAlpha = t > 0.88 ? (1 - t) / 0.12 : Math.min(1, pop);
-        const shown = (f.revealFrom || 0) + (now - f.t0) / 22;
-        const reveal = shown / Math.max(1, f.text.length) / 2.2;
-        speechBubble(c, x, y - (1 - pop) * 10, f.text, reveal, f.question ? { bg: "#fff4cc", border: "#8a5a10" } : {});
-        c.globalAlpha = 1;
+        continue;
       } else if (f.kind === "beam") {
         this.drawBeam(f, t, now);
       } else if (f.kind === "pillar") {
@@ -1582,6 +1594,37 @@ export class World {
         }
         c.restore();
       }
+    }
+  }
+
+  // Speech bubbles: one per print(). For each speaker the newest one sits
+  // right above him (with a tail), the older ones pile up above it.
+  drawBubbles(now) {
+    const c = this.ctx;
+    const owners = new Map();
+    for (const f of this.effects) {
+      if (f.kind !== "bubble") continue;
+      if (!owners.has(f.owner)) owners.set(f.owner, []);
+      owners.get(f.owner).push(f);
+    }
+    for (const list of owners.values()) {
+      list.sort((a, b) => b.t0 - a.t0);
+      const [x, y0] = list[0].at();
+      let y = y0;
+      list.forEach((f, i) => {
+        if (i > 0 && y < 40) return;
+        const t = Math.min(1, (now - f.t0) / f.dur);
+        const pop = t < 0.04 ? 0.7 + 7.5 * t : 1;
+        const fade = t > 0.88 ? (1 - t) / 0.12 : 1;
+        c.globalAlpha = Math.min(fade, pop) * (i === 0 ? 1 : Math.max(0.55, 0.9 - i * 0.12));
+        const shown = (f.revealFrom || 0) + (now - f.t0) / 22;
+        const reveal = shown / Math.max(1, f.text.length) / 2.2;
+        const style = f.question ? { bg: "#fff4cc", border: "#8a5a10" } : {};
+        if (i > 0) style.tail = false;
+        const box = speechBubble(c, x, y - (i === 0 ? (1 - pop) * 10 : 0), f.text, reveal, style);
+        y = box.top - 5;
+        c.globalAlpha = 1;
+      });
     }
   }
 

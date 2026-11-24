@@ -76,6 +76,7 @@ class Sandbox:
         self.output: list[str] = []
         self.output_len = 0
         self.line_buffer = ""
+        self.next_cont = False
         self.truncated = False
         self.tracing = False
         self.main_ns: dict[str, Any] = {}
@@ -543,9 +544,17 @@ class Sandbox:
         self.output.append(text)
         self.output_len += len(text)
         self.line_buffer += text
+        emitted = 0
         while "\n" in self.line_buffer:
             line, self.line_buffer = self.line_buffer.split("\n", 1)
-            self.emit_print(line)
+            # A line is a continuation when it comes from the same string
+            # as the previous one (print("a\nb")): the world shows both in
+            # the same speech bubble.
+            self.emit_print(line, cont=self.next_cont or emitted > 0)
+            self.next_cont = False
+            emitted += 1
+        if emitted and self.line_buffer:
+            self.next_cont = True
         return len(text)
 
     def read_input(self, prompt: Any = "") -> str:
@@ -568,7 +577,7 @@ class Sandbox:
         sys.stdout.write(value + "\n")
         return value
 
-    def emit_print(self, line: str) -> None:
+    def emit_print(self, line: str, cont: bool = False) -> None:
         if not self.tracing:
             return
         speaker = None
@@ -579,7 +588,11 @@ class Sandbox:
             if entry.get("kind") in ("static", "class"):
                 speaker = "class:" + entry["cls"]
                 break
-        self.emit({"type": "print", "text": line[:300], "oid": speaker})
+        event: dict[str, Any] = {"type": "print", "text": line[:300],
+                                 "oid": speaker}
+        if cont:
+            event["cont"] = True
+        self.emit(event)
 
 
 class OutputProxy(io.TextIOBase):
@@ -890,7 +903,7 @@ def main() -> None:
         sandbox.tracing = False
     if sandbox.line_buffer:
         sandbox.tracing = want_trace
-        sandbox.emit_print(sandbox.line_buffer)
+        sandbox.emit_print(sandbox.line_buffer, cont=sandbox.next_cont)
         sandbox.tracing = False
     if error is not None and sandbox.steps:
         sandbox.steps[-1]["events"].append(
