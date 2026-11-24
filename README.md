@@ -118,6 +118,15 @@ générés par le navigateur (aucun fichier). Bouton 🔊/🔇 en haut à droite
 
 **Visite guidée** : proposée au premier lancement, rejouable avec le bouton **?**.
 
+**Scènes d'histoire** : chaque niveau (les 43) a sa scène dans le coin droit de la carte,
+avec les personnages et le décor de l'histoire (le villageois et sa maison à éclairer, le
+garde du pont, la mineuse et sa tour, le gardien du portail…). À l'ouverture du niveau,
+la caméra s'approche et les personnages racontent l'histoire dans des bulles ; un clic sur
+un personnage la fait rejouer. Ce sont eux qui répondent aux `input()` de ton programme et
+qui donnent les arguments `sys.argv`. Quand la mission est réussie, ils se réjouissent et
+le décor montre le résultat (maison éclairée, pont réparé, tempête dissipée…). Les scènes
+sont décrites dans `server/curriculum/scenes.py`, les modèles 3D dans `web/js/scene.js`.
+
 ## Contenu
 
 Voir **`docs/ANALYSE_ET_PROGRAMME.md`** : analyse des quatre sujets, inventaire des
@@ -141,10 +150,11 @@ pycraft/
 │   ├── static_checks.py        analyse AST (règles de mission) + revue qualité
 │   ├── errors_fr.py            explication des erreurs Python en français
 │   ├── achievements.py         statistiques et succès
+│   ├── curriculum/scenes.py    personnages, décors et dialogues de chaque niveau
 │   └── curriculum/             régions, niveaux, missions, quiz (données)
 ├── web/                        interface (HTML/CSS/JS sans dépendance)
-│   └── js/  main · editor · world · models · fx · trace · inspector · diagram
-│            lesson · tour · sound · util
+│   └── js/  main · editor · world · models · scene · fx · trace · inspector
+│            diagram · lesson · tour · sound · util
 ├── tests/                      pytest (+ solutions de référence : SPOILERS)
 │   ├── test_frontend.py        JS : syntaxe, imports, ids, tests unitaires,
 │   │                           test dans un vrai navigateur (si Chrome présent)

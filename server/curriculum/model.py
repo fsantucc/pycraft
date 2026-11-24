@@ -65,6 +65,8 @@ class Level:
     readonly: list[str] = field(default_factory=list)
     demo_stdin: list[str] = field(default_factory=list)
     demo_argv: list[str] = field(default_factory=list)
+    # Characters and scenery of the story (see scenes.py).
+    scene: dict[str, Any] = field(default_factory=dict)
 
     def public(self) -> dict[str, Any]:
         """What the browser may see: no check code, no answers."""

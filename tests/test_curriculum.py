@@ -128,3 +128,51 @@ def test_full_progression(store: ProgressStore) -> None:
     summary = store.summary()
     assert len(summary["rewards"]) == 13
     assert summary["xp"] > 4000
+
+
+# ------------------------------------------------------------ story scenes
+def _scene_names(kind: str) -> set[str]:
+    """Skins / props declared in web/js/scene.js."""
+    import re
+    from pathlib import Path
+    source = (Path(__file__).resolve().parent.parent / "web" / "js"
+              / "scene.js").read_text(encoding="utf-8")
+    if kind == "skins":
+        block = source[source.index("export const SKINS"):
+                       source.index("export const SKIN_NAMES")]
+        return set(re.findall(r"^  (\w+): \{", block, re.M))
+    block = source[source.index("export const PROPS"):
+                   source.index("export const PROP_NAMES")]
+    return set(re.findall(r"^  (\w+)\(", block, re.M))
+
+
+@pytest.mark.parametrize("level_id", ORDER)
+def test_every_level_has_a_story_scene(level_id: str) -> None:
+    level = LEVELS[level_id]
+    scene = level.scene
+    assert scene and scene["npcs"], f"{level_id} : aucune scène"
+    skins = _scene_names("skins")
+    props = _scene_names("props")
+    ids = {n["id"] for n in scene["npcs"]}
+    assert len(ids) == len(scene["npcs"])
+    for n in scene["npcs"]:
+        assert n["skin"] in skins, n["skin"]
+        assert n["name"]
+    for p in scene["props"]:
+        assert p["type"] in props, p["type"]
+    assert len(scene["intro"]) >= 3, f"{level_id} : histoire trop courte"
+    for who, text in scene["intro"] + [scene["success"]] + (
+            [scene["fail"]] if "fail" in scene else []):
+        assert who in ids, f"{level_id} : {who} absent de la scène"
+        assert 0 < len(text) <= 110, f"{level_id} : réplique trop longue"
+    assert scene["answers"] in ids and scene["argv_by"] in ids
+
+
+def test_scenes_follow_the_inputs_of_the_mission() -> None:
+    # Levels that ask questions or take arguments name who answers.
+    from server.curriculum.scenes import SCENES
+    for level_id, level in LEVELS.items():
+        if level.stdin or level.demo_stdin:
+            assert SCENES[level_id]["answers"]
+        if level.argv or level.demo_argv:
+            assert SCENES[level_id]["argv_by"]

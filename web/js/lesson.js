@@ -103,10 +103,21 @@ export class LessonPanel {
   render_story(body) {
     const { level } = this.app;
     body.innerHTML = md(level.story);
+    // What the characters of the scene say, written down (to read again).
+    const scene = level.scene || {};
+    if (scene.intro && scene.intro.length) {
+      const names = Object.fromEntries((scene.npcs || []).map((n) => [n.id, n.name]));
+      const talk = el("details", { class: "card dialogue" }, el("summary", {}, "💬 Ce que disent les personnages"));
+      scene.intro.forEach(([who, text]) => talk.append(el("p", { class: "line" }, el("b", {}, `${names[who] || who} : `), text)));
+      body.append(talk);
+    }
     body.append(el("div", { class: "card" },
       el("h4", {}, "👀 Observe le monde"),
       el("p", {}, "Le monde au centre rejoue le programme de démonstration, instruction par instruction. Le code est encore caché : regarde d'abord ce qui apparaît, ce qui change, qui parle."),
-      el("button", { class: "tiny", onclick: () => this.app.runDemo(true) }, "↻ Revoir l'animation")));
+      el("button", { class: "tiny", onclick: () => this.app.runDemo(true) }, "↻ Revoir l'animation"),
+      level.scene && level.scene.npcs && level.scene.npcs.length
+        ? el("button", { class: "tiny", style: "margin-left:6px", onclick: () => this.app.world.playIntro() }, "💬 Réécouter les personnages")
+        : null));
     body.append(this.next("Comprendre →", "explain"));
   }
 

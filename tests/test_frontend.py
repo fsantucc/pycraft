@@ -110,6 +110,21 @@ def test_lesson_actions_live_in_the_sticky_bar() -> None:
     assert rule and "position: sticky" in rule.group(1)
 
 
+@needs_node
+def test_story_scenes_fit_on_the_stage(tmp_path: Path) -> None:
+    """Every scene stays inside the map and nothing overlaps."""
+    import json
+    from server.curriculum.scenes import SCENES
+    data = tmp_path / "scenes.json"
+    data.write_text(json.dumps(SCENES), encoding="utf-8")
+    script = ROOT / "tests" / "js" / "check_scenes.mjs"
+    assert NODE is not None
+    result = subprocess.run([NODE, str(script), str(data)],
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == []
+
+
 # ------------------------------------------------------------ unit tests
 @needs_node
 def test_js_unit_tests() -> None:

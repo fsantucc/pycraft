@@ -296,6 +296,9 @@ class App {
     localStorage.setItem("pycraft.level", levelId);
     this.world.setTheme(this.region.theme);
     this.world.hideBoss();
+    // The characters and scenery of the story, and the story told by them.
+    this.world.setStage(this.level.scene, !!this.progress.levels[levelId].mission_passed);
+    this.world.playIntro();
     this.lesson.reset();
     $("where").textContent = `${this.region.name} — ${this.level.number} ${this.level.title}`;
     const saved = await api(`/api/code?level=${levelId}`);
@@ -347,7 +350,20 @@ class App {
     }
     this.lesson.render();
     document.querySelector('.tab[data-tab="lesson"]').click();
-    if (step === "story") this.runDemo(true);
+    clearTimeout(this.demoTimer);
+    if (step === "story") {
+      // First the characters tell the story, then the demonstration plays.
+      const wait = Math.max(0, this.world.focusUntil - performance.now() - 1200);
+      const levelId = this.level.id;
+      if (wait > 0) {
+        this.clearRun();
+        this.demoTimer = setTimeout(() => {
+          if (this.step === "story" && this.level.id === levelId) this.runDemo(true);
+        }, wait);
+      } else {
+        this.runDemo(true);
+      }
+    }
     else if (step === "demo") this.runDemo(false);
     else if (step === "mission" && !this.model) this.clearRun();
   }
@@ -478,7 +494,9 @@ class App {
       const io = this.mode === "snippet" ? (this.snippetIO || { stdin: [], argv: [] }) : this.readIO();
       const level = this.mode === "snippet" ? undefined : this.level && this.level.id;
       const result = await api("/api/run", { files, entry, stdin: io.stdin, argv: io.argv, level, track: byPlayer });
+      this.world.unfocus();
       this.loadResult(result, files, autoplay);
+      if (this.mode !== "snippet") this.world.npcArgv(io.argv);
     } catch (err) {
       toast(err.message, "bad");
     } finally {
@@ -654,6 +672,11 @@ class App {
   }
 
   select(target) {
+    if (target && target.kind === "npc") {
+      // Clicking a character of the story: he tells his story again.
+      this.world.playIntro();
+      return;
+    }
     this.selected = target;
     this.world.select(target);
     if (target) document.querySelector('.tab[data-tab="inspector"]').click();
@@ -662,12 +685,15 @@ class App {
 
   hover(target, e) {
     const tip = $("tooltip");
-    if (!target || !this.state) {
+    if (!target || (!this.state && target.kind !== "npc")) {
       tip.classList.add("hidden");
       return;
     }
     let html = "";
-    if (target.kind === "object") {
+    if (target.kind === "npc") {
+      const npc = this.world.stageNpc(target.id);
+      html = `<b>${esc(npc ? npc.name : "")}</b><br>Personnage de l'histoire.<br><i>Clique pour réécouter ce qu'il dit.</i>`;
+    } else if (target.kind === "object") {
       const obj = this.state.objects.get(target.id);
       if (!obj) return;
       html = `<b>${esc(obj.cls)}</b> (objet)<br>` + (Object.entries(obj.attrs).map(([k, v]) => `${k.startsWith("_") ? "🔒 " : ""}${esc(k)} = ${esc(showValue(v))}`).join("<br>") || "<i>aucun attribut</i>");
@@ -718,6 +744,8 @@ class App {
       this.banner(res.passed ? "Mission réussie !" : `${res.results.filter((r) => !r.ok).length} vérification(s) échouée(s)`, !res.passed);
       sound.play(res.passed ? "victory" : "fail");
       if (res.passed) this.world.celebrate();
+      this.world.unfocus();
+      this.world.npcReact(res.passed);
       res.xp_gained.forEach((g) => toast(`+${g.xp} XP — ${g.label}`, "xp"));
       res.rewards.forEach((r) => toast(`🏆 Récompense : ${r}`, "xp"));
       this.lesson.render();

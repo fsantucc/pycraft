@@ -413,3 +413,8 @@ body.resizing canvas, body.resizing iframe { pointer-events: none; }
 .tour-btns { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
 .tour-btns .tour-skip { margin-right: auto; }
 .label:has(button) { white-space: normal; overflow: visible; }
+
+/* story dialogue (written version of what the characters say) */
+.dialogue summary { cursor: pointer; font-weight: 700; font-size: 13px; }
+.dialogue .line { margin: 6px 0; font-size: 13px; }
+.dialogue .line b { color: #b8f36b; }

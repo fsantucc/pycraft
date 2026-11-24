@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from .model import Level, Region
+from .scenes import SCENES
 from . import (r0_prairie, r1_village, r2_atelier, r3_citadelle, r4_forge,
                r5_labo, r6_tour, r7_royaume, r8_faille, r9_biblio)
 
@@ -37,6 +38,10 @@ LEVELS: dict[str, Level] = {
     level.id: level for region in REGIONS for level in region.levels
 }
 ORDER: list[str] = [level.id for region in REGIONS for level in region.levels]
+
+# The story scene of each level (characters, scenery, dialogues).
+for _level_id, _scene in SCENES.items():
+    LEVELS[_level_id].scene = _scene
 
 NOTIONS: dict[str, str] = {
     "A1": "Exécution séquentielle", "A2": "Point d'entrée",

@@ -3,6 +3,7 @@
 // calls). Nothing here is decorative except the terrain props.
 import { Particles, hash, nameTag, roundRect, speechBubble } from "./fx.js";
 import { buildParts, crierParts, healthOf } from "./models.js";
+import { npcParts, propParts, SKINS } from "./scene.js";
 import { sound } from "./sound.js";
 import { TraceModel } from "./trace.js";
 import { hashColor, showValue } from "./util.js";
@@ -11,6 +12,10 @@ const W = 24;
 const D = 24;
 // Layout helper: s = depth in the screen (x + y), d = left/right (x - y).
 const SD = (s, d) => [(s + d) / 2, (s - d) / 2];
+// The story stage: the right corner of the map, where the characters and the
+// scenery of the level stand. Scene positions are [ds, dd] offsets from it.
+const STAGE = [24, 15];
+const stageSD = (at) => SD(STAGE[0] + at[0], STAGE[1] + at[1]);
 const TW = 34;
 const TH = 17;
 const BH = 20;
@@ -94,6 +99,9 @@ export class World {
     this.crierSpeakAt = 0;
     this.crierAct = null;
     this.emptyHint = true;
+    this.stage = null;
+    this.introTimers = [];
+    this.focusUntil = 0;
     this.nextAmbient = 0;
     this.labelRects = [];
     this.clouds = Array.from({ length: 7 }, (_, i) => ({
@@ -163,6 +171,16 @@ export class World {
         pts.push(this.unit(x, y, 0), this.unit(x, y, h));
       }
     };
+    // While the characters tell the story, the camera comes close to them.
+    if (this.stage && performance.now() < this.focusUntil) {
+      for (const item of [...this.stage.npcs, ...this.stage.props]) add(item.x - 0.5, item.y - 0.5, item.x + (item.w || 1) + 0.5, item.y + (item.d || 1) + 0.5, 3.2);
+      const us = pts.map((p) => p[0]);
+      const vs = pts.map((p) => p[1]);
+      const du = Math.max(...us) - Math.min(...us);
+      const dv = Math.max(...vs) - Math.min(...vs);
+      const k = Math.max(0.8, Math.min(2.2, Math.min(this.width / (du + 120), this.height / (dv + 160))));
+      return { k, u: (Math.max(...us) + Math.min(...us)) / 2, v: (Math.max(...vs) + Math.min(...vs)) / 2 - 30 };
+    }
     for (const bp of this.blueprints.values()) add(bp.x, bp.y, bp.x + 2, bp.y + 2, 2);
     for (const e of this.entities.values()) add(e.tx - 0.5, e.ty - 0.5, e.tx + 1.5, e.ty + 1.5, 2.6);
     for (const sg of this.signs.values()) add(sg.x - 1.5, sg.y, sg.x + 1, sg.y + 1, 1.6);
@@ -177,6 +195,9 @@ export class World {
       add(sx, sy, sx + 3, sy + 1, this.stack.length * 0.55 + 1);
     }
     if (this.boss) add(...SD(13, 11), ...SD(16, 13), 4);
+    if (this.stage) {
+      for (const item of [...this.stage.npcs, ...this.stage.props]) add(item.x, item.y, item.x + (item.w || 1), item.y + (item.d || 1), item.h || 2.4);
+    }
     if (pts.length < 8) add(0, 0, W, D, 0);
     const [cx, cy] = SD(7, -6);
     add(cx, cy, cx + 1, cy + 1, 2.4);
@@ -353,7 +374,7 @@ export class World {
       const text = JSON.stringify(items);
       const prev = this.collections.get(name);
       this.collections.set(name, {
-        name, kind: value.t, items, len: value.len, s: colStart + cIndex * 5, d0: -2,
+        name, kind: value.t, items, len: value.len, s: colStart + cIndex * 5, d0: -6,
         changedAt: prev && prev.text !== text ? performance.now() : prev ? prev.changedAt : performance.now(),
         bornAt: prev ? prev.bornAt : performance.now(), text,
       });
@@ -463,6 +484,189 @@ export class World {
 
   crierPos() {
     return SD(7, -6);
+  }
+
+  // ------------------------------------------------------------ story stage
+  // scene = { npcs: [{id, name, skin, at, pose}], props: [{type, at, label,
+  // n, color}], intro: [[id, text]], answers, argv_by, success, fail }
+  setStage(scene, done = false) {
+    this.introTimers.forEach(clearTimeout);
+    this.introTimers = [];
+    this.effects = this.effects.filter((f) => !(f.kind === "bubble" && String(f.owner).startsWith("npc:")));
+    if (!scene || !scene.npcs || !scene.npcs.length) {
+      this.stage = null;
+      return;
+    }
+    const npcs = scene.npcs.map((n, i) => {
+      const [x, y] = stageSD(n.at);
+      return { ...n, x, y, w: 1, d: 1, h: 2.3, pose: n.pose || "idle", poseUntil: 0, seed: i * 1.7 };
+    });
+    const props = (scene.props || []).map((p, i) => {
+      const [x, y] = stageSD(p.at);
+      return { ...p, x, y, w: 2, d: 2, h: 2.4, seed: i * 3.1 };
+    });
+    this.stage = { ...scene, npcs, props, done };
+  }
+
+  setStageDone(done) {
+    if (this.stage) this.stage.done = done;
+  }
+
+  stageNpc(id) {
+    if (!this.stage) return null;
+    return this.stage.npcs.find((n) => n.id === id) || this.stage.npcs[0];
+  }
+
+  npcTop(id) {
+    return () => {
+      const n = this.stageNpc(id);
+      return n ? this.project(n.x + 0.5, n.y + 0.5, 2.45) : [0, 0];
+    };
+  }
+
+  npcPose(id, pose, ms) {
+    const n = this.stageNpc(id);
+    if (!n) return;
+    n.pose = pose;
+    n.poseUntil = performance.now() + ms;
+  }
+
+  npcSay(id, text, { dur = 0, delay = 0, answer = false } = {}) {
+    const n = this.stageNpc(id);
+    if (!n) return;
+    const go = () => {
+      const life = dur || Math.min(9000, 2400 + String(text).length * 45);
+      this.npcPose(n.id, "talk", Math.min(life, 2200));
+      sound.play("blip");
+      this.addEffect({ kind: "bubble", at: this.npcTop(n.id), text: answer ? `🗣 ${text}` : String(text), dur: life, owner: `npc:${n.id}`, npc: true });
+    };
+    if (delay) this.introTimers.push(setTimeout(go, delay)); else go();
+  }
+
+  // The characters tell the story, one line after the other.
+  playIntro() {
+    if (!this.stage || !this.stage.intro) return 0;
+    this.introTimers.forEach(clearTimeout);
+    this.introTimers = [];
+    let at = 600;
+    for (const [id, text] of this.stage.intro) {
+      const life = Math.min(8000, 2600 + text.length * 50);
+      this.introTimers.push(setTimeout(() => this.npcSay(id, text, { dur: life }), at));
+      at += life * 0.8;
+    }
+    this.focusUntil = performance.now() + at + 1500;
+    return at;
+  }
+
+  // Back to the whole world (a program is running).
+  unfocus() {
+    this.focusUntil = 0;
+  }
+
+  npcArgv(argv) {
+    if (!this.stage || !argv.length) return;
+    const who = this.stageNpc(this.stage.argv_by || this.stage.answers);
+    if (who) this.npcSay(who.id, `Je lance le programme avec : ${argv.join(" ")}`, { dur: 3200, delay: 200 });
+  }
+
+  // Reaction to the verification of the mission.
+  npcReact(passed) {
+    if (!this.stage) return;
+    if (passed) {
+      this.stage.done = true;
+      this.stage.npcs.forEach((n) => this.npcPose(n.id, "cheer", 2600));
+      const [id, text] = this.stage.success || [this.stage.npcs[0].id, "Merci, tu as réussi !"];
+      this.npcSay(id, text, { dur: 4800, delay: 1500 });
+      for (const n of this.stage.npcs) {
+        this.particles.burst(this.npcTop(n.id), { count: 26, colors: ["#f2c14e", "#b8f36b", "#ffffff"], speed: 70, up: 140, gravity: 220, size: 4, glow: true });
+      }
+    } else {
+      this.stage.npcs.forEach((n) => this.npcPose(n.id, "sad", 2200));
+      const [id, text] = this.stage.fail || [this.stage.npcs[0].id, "Hmm… ce n'est pas encore ça. Regarde les vérifications en ✗."];
+      this.npcSay(id, text, { dur: 3600, delay: 300 });
+    }
+  }
+
+  collectStage(list, now) {
+    const st = this.stage;
+    if (!st) return;
+    for (const prop of st.props) {
+      const { parts, lights } = propParts(prop.type, { done: prop.invert ? !st.done : st.done, t: now, n: prop.n, color: prop.color });
+      prop.lights = lights;
+      prop.top = Math.max(0.5, ...parts.map((p) => p.z + p.h));
+      const cx = parts.length ? Math.max(...parts.map((p) => p.x + p.w)) / 2 : 0.5;
+      const cy = parts.length ? Math.max(...parts.map((p) => p.y + p.d)) / 2 : 0.5;
+      prop.cx = cx;
+      prop.cy = cy;
+      list.push({ d: this.depthOf(prop.x + cx, prop.y + cy, 0), fn: () => {
+        const key = (p) => this.depthOf(p.x + p.w / 2, p.y + p.d / 2, p.z);
+        const sorted = parts.map((p, pi) => ({ ...p, pi })).sort((a, b) => key(a) - key(b) || a.pi - b.pi);
+        for (const p of sorted) {
+          this.box(prop.x + p.x, prop.y + p.y, p.z, p.w, p.d, p.h, p.c, 1, p.role === "flame" ? null : "rgba(0,0,0,0.25)",
+            p.w * p.h > 0.3 && p.role !== "flame" ? 2 : 0, prop.seed + p.pi * 2.3);
+        }
+      } });
+    }
+    for (const n of st.npcs) {
+      if (n.poseUntil && now > n.poseUntil) {
+        n.pose = n.restPose || "idle";
+        n.poseUntil = 0;
+      }
+      const { parts, lights } = npcParts(n.skin, n.pose, now, n.seed);
+      n.lights = lights;
+      list.push({ d: this.depthOf(n.x + 0.5, n.y + 0.5, 0) + 0.01, fn: () => {
+        const leg = (p) => (p.role === "legL" || p.role === "legR" ? 0 : 1);
+        const key = (p) => this.depthOf(p.x + p.w / 2, p.y + p.d / 2, p.z);
+        const sorted = parts.map((p, pi) => ({ ...p, pi })).sort((a, b) => leg(a) - leg(b) || key(a) - key(b) || a.pi - b.pi);
+        for (const p of sorted) {
+          this.box(n.x + p.x, n.y + p.y, p.z, p.w, p.d, p.h, p.c, 1, "rgba(0,0,0,0.25)", p.w * p.h > 0.12 && p.role !== "eye" ? 2 : 0, n.seed + p.pi * 5.17);
+        }
+      } });
+      const [sx, sy] = this.project(n.x + 0.5, n.y + 0.5, 2.3);
+      const [bx, by] = this.project(n.x + 0.5, n.y + 0.5, 0);
+      const k = this.cam.k * this.zoom;
+      this.hitboxes.push({ x0: sx - 18 * k, x1: sx + 18 * k, y0: sy, y1: by + 6, target: { kind: "npc", id: n.id } });
+    }
+  }
+
+  // Warm halos and sparks around torches, fires, portals…
+  drawStageLights(now) {
+    const st = this.stage;
+    if (!st) return;
+    const c = this.ctx;
+    const k = this.cam.k * this.zoom;
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    for (const item of [...st.props, ...st.npcs]) {
+      for (const [lx, ly, lz, color] of item.lights || []) {
+        const [x, y] = this.project(item.x + lx, item.y + ly, lz);
+        const r = (22 + 4 * Math.sin(now / 160 + lx * 7)) * k;
+        const g = c.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, `${color}88`);
+        g.addColorStop(1, `${color}00`);
+        c.fillStyle = g;
+        c.fillRect(x - r, y - r, r * 2, r * 2);
+        if (Math.random() < 0.04) {
+          this.particles.ambient({ x, y, vx: (Math.random() - 0.5) * 10, vy: -20 - Math.random() * 20, g: 0, life: 900, size: 2.5, color, glow: true, fadeIn: true });
+        }
+      }
+    }
+    c.restore();
+  }
+
+  drawStageLabels() {
+    const st = this.stage;
+    if (!st) return;
+    for (const n of st.npcs) {
+      const [x, y] = this.project(n.x + 0.5, n.y + 0.5, 0);
+      const skin = SKINS[n.skin] || {};
+      this.tag(x, y + 26, n.name, "#eaffd8", 10, "rgba(20,40,14,0.9)", { icon: skin.icon || "🧑", border: "#6aa84f" });
+    }
+    for (const p of st.props) {
+      if (!p.label) continue;
+      const [x, y] = this.project(p.x + (p.cx || 0.5), p.y + (p.cy || 0.5), (p.top || 1) + 0.25);
+      this.tag(x, y, p.label, "#f5ecd7", 9, "rgba(40,30,20,0.75)", {});
+    }
   }
 
   // Make the crier react: speak, ask, read, call, alert or cheer.
@@ -693,7 +897,13 @@ export class World {
           const at = this.crierTop();
           this.crierDo("ask", 2600);
           this.addEffect({ kind: "bubble", at, text: `❓ ${ev.prompt.trim()}`, dur: Math.min(6000, 1800 + ev.prompt.length * 40), owner: "crier", question: true });
-          this.addEffect({ kind: "float", at, text: `⌨ "${ev.value}"`, color: "#ffe7a0", dur: 1900, rise: 0.5 });
+          const who = this.stage && this.stageNpc(this.stage.answers);
+          if (who) {
+            // The character of the story is the one who answers.
+            this.npcSay(who.id, ev.value === "" ? "(il appuie sur Entrée)" : ev.value, { dur: 2600, delay: 350, answer: true });
+          } else {
+            this.addEffect({ kind: "float", at, text: `⌨ "${ev.value}"`, color: "#ffe7a0", dur: 1900, rise: 0.5 });
+          }
           break;
         }
         case "yield": {
@@ -852,6 +1062,7 @@ export class World {
     const drawables = [];
     this.hitboxes = [];
     this.collectProps(drawables, now);
+    this.collectStage(drawables, now);
 
     // Blueprint pedestals and holograms (with a scan line while building).
     for (const bp of this.blueprints.values()) {
@@ -947,6 +1158,7 @@ export class World {
     if (this.boss) this.collectBoss(drawables, now);
     drawables.sort((a, b) => a.d - b.d);
     drawables.forEach((d) => d.fn());
+    this.drawStageLights(now);
 
     this.particles.draw(c, this.dt || 0.016);
     this.labelRects = [];
@@ -1106,6 +1318,12 @@ export class World {
     c.beginPath();
     c.ellipse(sx, sy, 26 * k, 13 * k, 0, 0, Math.PI * 2);
     c.fill();
+    for (const n of this.stage ? this.stage.npcs : []) {
+      const [nx, ny] = this.project(n.x + 0.5, n.y + 0.5, 0);
+      c.beginPath();
+      c.ellipse(nx, ny, 18 * k, 9 * k, 0, 0, Math.PI * 2);
+      c.fill();
+    }
     if (this.selected && this.selected.kind === "object") {
       const ent = this.entities.get(this.selected.id);
       if (ent) {
@@ -1126,7 +1344,7 @@ export class World {
   collectProps(list, now) {
     const props = [];
     const kind = this.theme.prop;
-    const spots = [SD(25, 21), SD(31, 15), SD(39, 7), SD(44, -2), SD(25, -22), SD(11, 9)];
+    const spots = (this.stage ? [SD(39, 7), SD(44, -2), SD(25, -22), SD(11, 9), SD(36, 0)] : [SD(25, 21), SD(31, 15), SD(39, 7), SD(44, -2), SD(25, -22), SD(11, 9)]);
     spots.forEach(([x, y], i) => {
       if (kind === "tree") {
         const big = hash(i, 11) > 0.5;
@@ -1348,6 +1566,7 @@ export class World {
     const [cx, cy] = this.crierPos();
     const [lx, ly] = this.project(cx + 0.5, cy + 0.5, 0);
     this.tag(lx, ly + 30, "Crieur public · affiche tes print()", "#ffe7a0", 9, "rgba(90,25,20,0.88)", { icon: "📢", border: "#f2c14e" });
+    this.drawStageLabels();
     const [zx, zy] = this.project(...SD(10.5, 12), 0);
     if (this.blueprints.size || this.entities.size) {
       this.tag(zx, zy - 4, "PLANS (classes)", "#7fe9f0", 10, null, { icon: "▲", accent: "#5ee6e0", collide: false });
@@ -1425,7 +1644,7 @@ export class World {
       c.fillStyle = "#e24c4c";
       c.fill();
     }
-    if (this.emptyHint && !this.blueprints.size && !this.entities.size && !this.signs.size && !this.collections.size) {
+    if (this.emptyHint && performance.now() > this.focusUntil && !this.blueprints.size && !this.entities.size && !this.signs.size && !this.collections.size) {
       c.font = "600 13px system-ui";
       c.fillStyle = "rgba(255,255,255,0.75)";
       c.textAlign = "center";
@@ -1436,7 +1655,7 @@ export class World {
   }
 
   colPos(col, j) {
-    return SD(col.s, col.d0 + j * 3);
+    return SD(col.s, col.d0 + j * 2.4);
   }
 
   collectCollections(list, now) {
@@ -1725,7 +1944,7 @@ export class World {
         c.globalAlpha = Math.min(fade, pop) * (i === 0 ? 1 : Math.max(0.55, 0.9 - i * 0.12));
         const shown = (f.revealFrom || 0) + (now - f.t0) / 22;
         const reveal = shown / Math.max(1, f.text.length) / 2.2;
-        const style = f.question ? { bg: "#fff4cc", border: "#8a5a10" } : {};
+        const style = f.question ? { bg: "#fff4cc", border: "#8a5a10" } : f.npc ? { bg: "#eef9e4", border: "#2c5a1f", color: "#14240c" } : {};
         if (i > 0) style.tail = false;
         const box = speechBubble(c, x, y - (i === 0 ? (1 - pop) * 10 : 0), f.text, reveal, style);
         y = box.top - 5;
