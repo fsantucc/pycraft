@@ -46,10 +46,7 @@ print(guard.get_health())
         "Ligne 16 : la modification vient de l'extérieur. Alerte rouge dans le monde et dans le journal.",
         "Python l'a laissé faire : `_` est une convention, pas un verrou.",
     ],
-    experiments=[
-        "Remplace la ligne 16 par `guard.take_hit(500)`. La règle tient-elle ?",
-        "Lance « Analyse qualité » : la ligne 16 est-elle signalée ?",
-    ],
+    experiments=[],
     mission_title="Le golem gardien",
     mission="""Crée une classe `Golem` :
 
@@ -185,10 +182,7 @@ print(blaze.get_speed())
         "`set_speed(-4)` : bouclier rouge, `_speed` reste à 9.",
         "Le constructeur passe lui aussi par le setter : une seule règle, à un seul endroit.",
     ],
-    experiments=[
-        "Crée `Horse(\"Ghost\", 99)` : quelle vitesse obtient-il ?",
-        "Renomme `_speed` en `__speed` partout puis affiche `blaze.__dict__`. Quel nom Python a-t-il réellement utilisé ?",
-    ],
+    experiments=[],
     mission_title="Les balises des remparts",
     mission="""Crée une classe `Beacon` :
 

@@ -48,7 +48,8 @@ class Level:
     explanation: str
     demo: dict[str, str]
     demo_notes: list[str]
-    experiments: list[str]
+    # Guided experiments: see experiments.py (do / predict / see / why).
+    experiments: list[Any]
     mission_title: str
     mission: str
     starter: dict[str, str]
@@ -74,6 +75,10 @@ class Level:
         data["checks"] = [{"id": c.id, "label": c.label}
                           for c in self.checks]
         data["hints_count"] = len(self.hints)
+        # What an experiment should produce stays on the server (tests).
+        data["experiments"] = [
+            {k: v for k, v in e.items() if k != "expect"}
+            if isinstance(e, dict) else e for e in self.experiments]
         del data["hints"]
         data["quiz"] = [
             {"kind": q.kind, "prompt": q.prompt, "code": q.code,

@@ -69,15 +69,24 @@ plus les vrais **flake8** et **mypy** quand ils sont installés.
 
 - **Gauche** : l'éditeur Python (coloration, numéros de ligne, auto-indentation,
   autocomplétion, plusieurs fichiers, Ctrl+Entrée pour exécuter, Ctrl+/ pour commenter,
-  bouton Réinitialiser, sauvegarde automatique). Dans l'Acte I, le fichier `main.py` est
+  bouton Réinitialiser, sauvegarde automatique). Les parenthèses, crochets et accolades
+  sont colorés par niveau d'imbrication ; celle qui correspond à la parenthèse sous le
+  curseur est surlignée ; une parenthèse jamais fermée (ou fermée en trop) est soulignée
+  en rouge, avec une marque dans la marge qui explique le problème au survol. `(`, `[`,
+  `{` et les guillemets se ferment tout seuls (on « passe par-dessus » le caractère
+  fermant en le tapant), Entrée entre deux parenthèses ouvre une ligne indentée,
+  `else:` / `elif` / `except` / `finally` se ré-alignent sur leur `if` / `try`, et des
+  guides verticaux montrent les niveaux d'indentation. L'autocomplétion connaît aussi
+  les fonctions et classes des autres fichiers (avec leurs paramètres). Dans l'Acte I, le fichier `main.py` est
   **verrouillé** 🔒 : c'est le testeur qui importe et appelle ta fonction.
   Sous l'éditeur, **⌨ Entrées du programme** : ce que l'utilisateur tape au clavier
   (une réponse par ligne, pour `input()`) et les arguments de la ligne de commande (`sys.argv`).
 - **Centre** : le monde, avec la barre de lecture : ⏮ ◀ ▶/⏸ ▶| ⏭, curseur, vitesse.
   **F10** avance d'une instruction, **Maj+F10** recule. La ligne exécutée est surlignée
   dans l'éditeur, la console n'affiche que ce qui a déjà été imprimé, et le journal
-  décrit chaque événement en français. Glisser pour déplacer, molette pour zoomer,
-  ⟳ pour pivoter, clic sur un objet ou un plan pour l'inspecter.
+  décrit chaque événement en français. Glisser pour déplacer, molette pour zoomer
+  (vers le pointeur), ⟳ pour pivoter, ⌂ ou la touche **Début** pour recentrer ; la carte
+  ne peut pas sortir de l'écran. Clic sur un objet ou un plan pour l'inspecter.
 - **Droite** :
   - **Leçon** : les 7 étapes du niveau (Découverte → Explication → Démo →
     Essais → Mission → Vérification → Maîtrise) ;
@@ -106,7 +115,7 @@ des missions. Sauvegarde automatique dans `saves/progress.json`.
 
 **Statistiques et succès** (bouton *Progression*) : temps de jeu, exécutions, erreurs
 rencontrées et corrigées, missions sans indice, erreurs les plus fréquentes, temps par
-notion, et 17 succès dont la plupart sont cachés jusqu'à leur déblocage.
+notion, et 19 succès dont la plupart sont cachés jusqu'à leur déblocage.
 
 **Erreurs guidées** : quand ton programme plante, la console explique l'erreur en
 français puis pose des questions, une à la fois, pour t'aider à trouver la cause, sans
@@ -175,15 +184,91 @@ Cœur endormi, allume les sceaux un à un, puis l'éveil et l'explosion de lumi�
 que le gardien ne parle. Pendant la mission, chaque vérification réussie rallume les
 sceaux ; la réussite éveille complètement le Cœur. Clique sur le Cœur ou sur un sceau
 pour l'écouter. Code : `web/js/coeur.js` (le lieu) et `web/js/finale.js` (la cinématique).
+<<<<<<< HEAD
+=======
+
+**Objectif de chaque niveau** : en haut de la leçon, « 📚 Tu apprends » (les notions) et
+« 🎯 Ta mission ». À l'étape **Essais**, chaque expérience dit quoi changer (ou le fait
+pour toi), te demande de **prédire** le résultat avant d'exécuter, puis révèle ce qu'il
+faut observer et **pourquoi** ; après chaque exécution, un retour compare la sortie avec
+celle de la démo d'origine (lignes ajoutées / disparues, ou l'erreur et sa ligne). Ce
+que chaque expérience annonce est vérifié par les tests (`tests/test_experiments.py`).
+
+**Le monde réagit à ton code** : ce que fait le programme change la scène du niveau
+(`server/curriculum/scenes.py`, `RULES`, moteur `web/js/reactions.js`). Niveau 1.1 :
+`print("La nuit tombe...")` fait vraiment tomber la nuit (ciel, étoiles, lune,
+lucioles, un zombie qui rôde) ; chaque appel de `allumer_lanterne()` allume la lanterne
+(éteinte au départ : la flamme hésite puis tient, halo chaud) et fait fuir le zombie ;
+un deuxième appel la ravive sans l'éteindre ; « rentrent chez eux » éclaire la maison et
+ouvre sa porte. Ailleurs : la tour grandit étage par étage, la forge s'allume quand
+`is_open` vaut `True`, les vagues d'un générateur font sortir les créatures, une
+exception lancée fait jaillir des étincelles rouges… Les 42 niveaux qui ont une démo ont
+leurs règles, et les tests vérifient qu'elles réagissent bien à la démo. L'état est
+recalculé depuis le début de l'exécution : reculer ou sauter une étape montre toujours
+le même monde.
+
+**Personnages, décor et créatures** : un clic sur un personnage — ou sur son nom (dans
+le monde, ou dans la leçon : « 👥 Rencontre les habitants ») — rapproche la caméra et
+ouvre sa fiche : rôle, description, caractère, ce qu'il dit maintenant (l'histoire tant
+que la mission est à faire, des encouragements après un échec, sa fierté après la
+réussite ; « Lui parler » passe à la réplique suivante), et son rôle dans la mission.
+✕, Échap ou un clic ailleurs : la caméra revient où elle était. Le décor se clique
+aussi (coffre et porte qui s'ouvrent, état de la forge ou de la lanterne, panneau de la
+mission…), comme les créatures (elles réagissent à l'approche du pointeur) et les boss.
+Quelques secrets, clins d'œil à 42, sont cachés dans le monde (succès cachés).
+>>>>>>> c46f881 (lastfeatures)
 
 **Scènes d'histoire** : chaque niveau (les 43) a sa scène dans le coin droit de la carte,
 avec les personnages et le décor de l'histoire (le villageois et sa maison à éclairer, le
 garde du pont, la mineuse et sa tour, le gardien du portail…). À l'ouverture du niveau,
-la caméra s'approche et les personnages racontent l'histoire dans des bulles ; un clic sur
-un personnage la fait rejouer. Ce sont eux qui répondent aux `input()` de ton programme et
+la caméra s'approche et les personnages racontent l'histoire dans des bulles ; le bouton
+« 🎬 Revoir la scène » de la fiche d'un personnage la fait rejouer. Ce sont eux qui répondent aux `input()` de ton programme et
 qui donnent les arguments `sys.argv`. Quand la mission est réussie, ils se réjouissent et
 le décor montre le résultat (maison éclairée, pont réparé, tempête dissipée…). Les scènes
 sont décrites dans `server/curriculum/scenes.py`, les modèles 3D dans `web/js/scene.js`.
+
+## Panneau admin (atelier)
+
+Pour l'organisateur d'un atelier (par exemple la découverte de Python à 42 Genève) : le
+bouton **Admin** de la barre du haut, puis le mot de passe de l'atelier. Le panneau ne
+gère **que la sauvegarde de cet ordinateur** (celle donnée à `run.py`) : chaque poste a
+la sienne, il n'y a ni compte ni synchronisation.
+
+| Onglet | À quoi il sert |
+|---|---|
+| 🚩 Démarrage | Choisir où commence le participant : préréglages Débutant (1.1), Acte II (3.1), Acte III (10.1), Acte IV (11.1), ou n'importe quel niveau (Acte → Région → Niveau), puis « Commencer ici ». « Exploration libre » ouvre les 43 niveaux ; « Progression normale » retire tous les déblocages de l'admin. |
+| 🛟 Aide au joueur | Débloquer le niveau suivant ou toute la région, recommencer le niveau en cours (en gardant le code ou non), restaurer la dernière sauvegarde. |
+| 💾 Sauvegardes | Sauvegarder maintenant (avec une étiquette, un prénom par exemple), la liste des sauvegardes et leur restauration, l'export / import d'une partie pour changer d'ordinateur. |
+| 👥 Atelier | **Nouveau participant** en un clic : la partie actuelle est sauvegardée (avec le prénom du participant), la progression repart de zéro (code effacé ou gardé), le point de départ est choisi, le navigateur retrouve le vrai premier lancement (aperçu, accueil, visite guidée), l'admin est déconnecté et la page se recharge. |
+| 🕘 Historique | Les 50 dernières actions de l'admin, avec la date et l'heure. |
+
+Chaque action est **prévisualisée** (« 7 niveaux deviennent accessibles… »), puis
+confirmée ; le jeu se met à jour aussitôt, sans recharger la page.
+
+Comment ça marche :
+
+- **Aucune fausse progression.** Débloquer un niveau ne le marque jamais comme réussi :
+  la sauvegarde reçoit un petit bloc `admin` (`unlocked_through`, `all_unlocked`,
+  `start_level`) que la règle de déblocage prend en compte. Pas d'XP, de récompense ni
+  de succès gagné sans jouer. Une sauvegarde sans ce bloc se joue exactement comme avant.
+- **Sauvegardes** dans le dossier `backups/` à côté de la sauvegarde (les 30 plus
+  récentes), créées automatiquement avant toute restauration, import, niveau recommencé
+  ou nouveau participant. Une sauvegarde illisible ou d'une autre version n'est plus
+  jamais écrasée : elle est mise de côté avec la date (`progress.illisible-….json`) et le
+  panneau le signale. L'historique est dans `admin-history.json`.
+- **Accès** : le mot de passe est vérifié par le serveur, qui n'en garde qu'une empreinte
+  (PBKDF2) — il n'apparaît en clair nulle part dans le dépôt. Session dans un cookie
+  `HttpOnly` / `SameSite=Strict`, fermée après 30 min sans action (8 h au maximum) ou au
+  redémarrage du serveur ; 5 erreurs de mot de passe bloquent 30 s. Toutes les routes
+  `/api/admin/…` refusent les requêtes sans session et celles qui ne viennent pas de la
+  page du jeu.
+- **Changer le mot de passe** : lancer le jeu avec la variable d'environnement
+  `PYCRAFT_ADMIN_PASSWORD`, par exemple `PYCRAFT_ADMIN_PASSWORD=monmotdepasse python3 run.py`
+  (sous Windows : `set PYCRAFT_ADMIN_PASSWORD=monmotdepasse` puis `python run.py`).
+
+Limite honnête : le mot de passe protège l'**interface** pendant l'atelier. Un
+participant qui ouvre le dossier du jeu a toujours accès au fichier de sauvegarde et au
+code source.
 
 ## Contenu
 
@@ -205,14 +290,17 @@ pycraft/
 │   │   └── runner.py           traceur exécuté DANS le processus isolé
 │   ├── pedagogy.py             exécution, vérification des missions, indices, quiz
 │   ├── progress.py             XP, statuts, notions, sauvegarde JSON
+│   ├── admin.py                panneau admin : session, déblocages, sauvegardes
 │   ├── static_checks.py        analyse AST (règles de mission) + revue qualité
 │   ├── errors_fr.py            explication des erreurs Python en français
 │   ├── achievements.py         statistiques et succès
 │   ├── curriculum/scenes.py    personnages, décors et dialogues de chaque niveau
 │   └── curriculum/             régions, niveaux, missions, quiz (données)
 ├── web/                        interface (HTML/CSS/JS sans dépendance)
-│   └── js/  main · editor · world · models · scene · fx · trace · inspector
-│            diagram · lesson · tour · trailer · sound · util
+│   └── js/  main · editor · world · depth · models · scene · fx · trace
+│            inspector · diagram · lesson · tour · trailer · cinematic · finale
+│            coeur · reactions (code → monde) · characters (fiches) · sound
+│            admin · util
 ├── tests/                      pytest (+ solutions de référence : SPOILERS)
 │   ├── test_frontend.py        JS : syntaxe, imports, ids, tests unitaires,
 │   │                           test dans un vrai navigateur (si Chrome présent)
@@ -245,7 +333,8 @@ d'audit et la liste blanche s'appliquent.
 ## Tests
 
 ```
-python3 -m pytest -q tests        # 236 tests
+python3 -m pytest -q tests        # 616 tests (dont le navigateur si Chrome est présent)
+node --test tests/js/*.test.mjs  # 28 tests JavaScript (aussi lancés par pytest)
 python3 -m mypy server run.py     # aucune erreur
 ```
 
@@ -275,6 +364,19 @@ Limites à connaître :
   attributs `self.`), sans analyse de types.
 - **Explications écrites** : enregistrées et comparées à une réponse de référence,
   mais pas notées automatiquement sur le fond (il faut au moins une phrase complète).
+- **Éditeur** : pas de repli de code (*folding*). L'éditeur est une zone de texte
+  posée sur la coloration syntaxique (ce qui garde la saisie native du navigateur) ;
+  replier des lignes demanderait un éditeur réécrit entièrement. Les guides
+  d'indentation et la couleur des parenthèses par niveau aident à lire l'imbrication.
+- **Ordre de dessin** : deux blocs qui s'interpénètrent n'ont pas d'ordre « vrai ».
+  Pour le décor (blocs pleins), ils sont séparés le long de l'axe où ils se
+  chevauchent le moins (`web/js/depth.js`) ; pour les personnages, les vêtements
+  enveloppent volontairement la tête (casque ouvert, capuche) et gardent l'ordre du
+  modèle.
+- **Le monde réagit au code** : les règles reconnaissent ce que fait le programme
+  (une ligne affichée, un appel, un objet créé, une exception…), pas son intention :
+  un programme qui appelle `allumer_lanterne()` allume la lanterne même si la fonction
+  est fausse — c'est la vérification de la mission qui juge le résultat.
 - **Modèles 3D** : choisis d'après le nom de la classe (zombie, mouton, coffre, tourelle…),
   puis hérités du parent ; une classe inconnue devient un cube coloré.
 

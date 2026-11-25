@@ -1,4 +1,6 @@
 // PyCraft — application glue: levels, editor buffers, execution playback.
+import { AdminPanel } from "./admin.js";
+import { BOOKS, CHARACTERS, EGGS, chestContents, creatureOf, propInfo } from "./characters.js";
 import { renderDiagram } from "./diagram.js";
 import { Editor } from "./editor.js";
 import { Inspector } from "./inspector.js";
@@ -9,6 +11,10 @@ import { heartPulse, heartWave, sealInfo, setHeart } from "./coeur.js";
 import { finaleCinematic } from "./finale.js";
 import { Tour } from "./tour.js";
 import { TRAILER_KEY, Trailer } from "./trailer.js";
+<<<<<<< HEAD
+=======
+import { reactionState } from "./reactions.js";
+>>>>>>> c46f881 (lastfeatures)
 import { TraceModel, describe } from "./trace.js";
 import { api, el, esc, md, pushToast, showValue, toast } from "./util.js";
 import { World } from "./world.js";
@@ -76,10 +82,15 @@ class App {
     }
     await this.refreshProgress();
     const remembered = localStorage.getItem("pycraft.level");
-    const firstOpen = this.curriculum.order.find((id) => {
+    // The organizer may have chosen where this participant starts (admin
+    // panel): the first open level from there.
+    const { order } = this.curriculum;
+    const start = (this.progress.admin || {}).start_level;
+    const from = Math.max(0, order.indexOf(start));
+    const firstOpen = order.slice(from).find((id) => {
       const st = this.progress.levels[id].status;
       return st === "available" || st === "in_progress";
-    }) || this.curriculum.order[0];
+    }) || order.find((id) => this.progress.levels[id].status !== "locked") || order[0];
     const target = remembered && this.progress.levels[remembered] && this.progress.levels[remembered].status !== "locked"
       ? remembered : firstOpen;
     this.watchCovers();
@@ -319,6 +330,9 @@ class App {
     $("btn-reset-code").addEventListener("click", () => this.resetCode());
     $("btn-map").addEventListener("click", () => this.showMap());
     $("btn-progress").addEventListener("click", () => this.showDashboard());
+    this.admin = new AdminPanel(this);
+    $("btn-admin").addEventListener("click", () => this.admin.open());
+    this.admin.refreshButton();
     $("overlay-close").addEventListener("click", () => $("overlay").classList.add("hidden"));
     $("overlay").addEventListener("click", (e) => { if (e.target.id === "overlay") $("overlay").classList.add("hidden"); });
     $("tl-play").addEventListener("click", () => (this.playing ? this.pause() : this.play()));
@@ -328,9 +342,9 @@ class App {
     $("tl-end").addEventListener("click", () => { this.pause(); this.goto(this.model ? this.model.count - 1 : 0, false); });
     $("tl-range").addEventListener("input", (e) => { this.pause(); this.goto(Number(e.target.value), false); });
     $("cam-rot").addEventListener("click", () => { this.world.rot = (this.world.rot + 1) % 4; });
-    $("cam-in").addEventListener("click", () => { this.world.zoom = Math.min(2.6, this.world.zoom * 1.15); });
-    $("cam-out").addEventListener("click", () => { this.world.zoom = Math.max(0.5, this.world.zoom / 1.15); });
-    $("cam-home").addEventListener("click", () => { this.world.zoom = 1; this.world.pan = { x: 0, y: 0 }; this.world.rot = 0; });
+    $("cam-in").addEventListener("click", () => this.world.zoomAt(1.2));
+    $("cam-out").addEventListener("click", () => this.world.zoomAt(1 / 1.2));
+    $("cam-home").addEventListener("click", () => this.recenter());
     $("dg-objects").addEventListener("change", () => this.renderSide());
     for (const id of ["io-stdin", "io-argv"]) {
       $(id).addEventListener("input", () => {
@@ -344,9 +358,25 @@ class App {
       this.renderSide();
     }));
     window.addEventListener("keydown", (e) => {
+<<<<<<< HEAD
       if (this.world.cinematic || document.body.classList.contains("trailer-on")) {
         // The start card of the trailer: Enter or Space press its button.
         if (document.activeElement && document.activeElement.closest(".tr-start")) return;
+=======
+      const covered = !$("overlay").classList.contains("hidden");
+      if (this.world.cinematic || document.body.classList.contains("trailer-on")) {
+        // The start card of the trailer: Enter or Space press its button.
+        if (document.activeElement && document.activeElement.closest(".tr-start")) return;
+        // A window covers the cinematic (it waits, paused): the keys belong
+        // to the window — typing, Enter, Escape to close it.
+        if (covered && !document.body.classList.contains("trailer-on")) {
+          if (e.key === "Escape" && !document.querySelector(".tour")) {
+            e.preventDefault();
+            $("overlay").classList.add("hidden");
+          }
+          return;
+        }
+>>>>>>> c46f881 (lastfeatures)
         // A cinematic handles its own keys (← ⏸ →); nothing else meanwhile.
         if (["Escape", " ", "F5", "F10", "Enter"].includes(e.key)) e.preventDefault();
         return;
@@ -354,6 +384,17 @@ class App {
       if (e.key === "Escape" && !$("overlay").classList.contains("hidden") && !document.querySelector(".tour")) {
         e.preventDefault();
         $("overlay").classList.add("hidden");
+        return;
+      }
+      const typing = document.activeElement && /^(TEXTAREA|INPUT|SELECT)$/.test(document.activeElement.tagName);
+      if (e.key === "Escape" && this.inspected) {
+        e.preventDefault();
+        this.closeInspect();
+        return;
+      }
+      if (e.key === "Home" && !typing) {
+        e.preventDefault();
+        this.recenter();
         return;
       }
       if (e.key === "F10") {
@@ -384,6 +425,8 @@ class App {
     this.pause();
     this.mode = null;
     this.model = null;
+    this.closeInspect(true);
+    this.lastCheck = null;
     this.level = this.levelsById[levelId];
     this.region = this.regionOf[levelId];
     localStorage.setItem("pycraft.level", levelId);
@@ -564,6 +607,103 @@ class App {
     this.onEdit(this.editor.getFiles());
   }
 
+  // « Faire la modification pour moi » of a guided experiment: the same
+  // change as server/curriculum/experiments.py (apply_patch), then the
+  // changed line is shown in the editor.
+  applyExperiment(x) {
+    const patch = x.patch || {};
+    if (this.mode !== "demo") this.setMode("demo");
+    let files = this.editor.getFiles();
+    const name = patch.file || "main.py";
+    let fresh = false;
+    if (patch.find && !(files[name] || "").includes(patch.find)) {
+      files = { ...this.level.demo };
+      fresh = true;
+    }
+    if (patch.find) {
+      let text = files[name].split(patch.find).join(patch.replace);
+      for (const [a, b] of patch.also || []) text = text.split(a).join(b);
+      files[name] = text;
+    }
+    if (patch.append) files[name] = `${files[name].replace(/\n+$/, "")}\n${patch.append}`;
+    this.buffers.demo = files;
+    this.editor.setFiles(files, patch.entry || name);
+    this.onEdit(this.editor.getFiles());
+    if (patch.stdin || patch.argv) {
+      if (patch.stdin) $("io-stdin").value = patch.stdin.join("\n");
+      if (patch.argv) $("io-argv").value = patch.argv.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(" ");
+      $("io-panel").open = true;
+      this.updateIOSummary();
+    }
+    // Show where the change is.
+    const where = patch.find ? files[name].indexOf(patch.replace || patch.find.split("\n")[0]) : -1;
+    if (where >= 0 && patch.replace) this.editor.gotoLine(name, files[name].slice(0, where).split("\n").length);
+    toast(fresh ? "Démo d'origine rétablie, puis modification faite. Prédis, puis ▶ Exécute !" : "Modification faite. Prédis le résultat, puis ▶ Exécute !");
+  }
+
+  // After a run during the « Essais » step: what changed compared with the
+  // original demonstration (an error, a loop without end, lines added or
+  // gone), shown in the lesson panel.
+  async experimentFeedback(result) {
+    const level = this.level;
+    if (!this.baselines) this.baselines = {};
+    if (!this.baselines[level.id]) {
+      try {
+        const base = await api("/api/run", { files: { ...level.demo }, entry: "main.py", stdin: level.demo_stdin, argv: level.demo_argv, level: level.id, track: false });
+        this.baselines[level.id] = base;
+      } catch {
+        return;
+      }
+    }
+    const base = this.baselines[level.id];
+    const lines = (out) => (out || "").replace(/\n$/, "").split("\n").filter((l, i, arr) => l || i < arr.length - 1);
+    const now = lines(result.output);
+    const before = lines(base.output);
+    const fb = { level: level.id, lines: [] };
+    if (result.truncated) {
+      fb.kind = "warn";
+      fb.title = "🔁 Le programme ne s'arrêtait pas";
+      fb.lines.push({ text: "Le jeu l'a stoppé après 4 000 étapes : une boucle (ou une récursion) ne se termine jamais." });
+    } else if (result.error) {
+      fb.kind = "err";
+      fb.title = `⚡ ${result.error.type}${result.error.line ? ` à la ligne ${result.error.line}` : ""}`;
+      fb.lines.push({ text: result.error.message });
+      fb.note = "L'explication détaillée est sous la console. Est-ce l'erreur que tu avais prédite ?";
+    } else {
+      fb.kind = "ok";
+      fb.title = "✔ Exécuté sans erreur";
+    }
+    // Lines that appear or disappear compared with the original demo
+    // (a small longest-common-subsequence diff).
+    const a = before.slice(0, 200);
+    const b = now.slice(0, 200);
+    const lcs = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+    for (let i = a.length - 1; i >= 0; i -= 1) {
+      for (let j = b.length - 1; j >= 0; j -= 1) lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+    const diff = [];
+    let i = 0;
+    let j = 0;
+    while (i < a.length || j < b.length) {
+      if (i < a.length && j < b.length && a[i] === b[j]) { i += 1; j += 1; } else if (j < b.length && (i >= a.length || lcs[i][j + 1] >= lcs[i + 1][j])) {
+        diff.push({ text: `+ ${b[j]}`, cls: "add" });
+        j += 1;
+      } else {
+        diff.push({ text: `− ${a[i]}`, cls: "del" });
+        i += 1;
+      }
+    }
+    if (!diff.length && !result.error && !result.truncated) {
+      fb.lines.push({ text: "L'affichage est le même que la démo d'origine : regarde le monde et l'inspecteur pour voir ce qui a changé." });
+    } else if (diff.length) {
+      fb.lines.push({ text: "Par rapport à la démo d'origine :" });
+      diff.slice(0, 8).forEach((d) => fb.lines.push(d));
+      if (diff.length > 8) fb.lines.push({ text: `… et ${diff.length - 8} autre(s) ligne(s).`, cls: "muted" });
+    }
+    this.experimentResult = fb;
+    if (this.step === "experiment") this.lesson.showFeedback();
+  }
+
   resetDemo() {
     this.buffers.demo = { ...this.level.demo };
     this.editor.setFiles(this.buffers.demo, "main.py");
@@ -640,6 +780,7 @@ class App {
   }
 
   loadResult(result, files, autoplay) {
+    if (this.step === "experiment" && this.mode === "demo") this.experimentFeedback(result);
     this.model = new TraceModel(result, files);
     // The "things will appear here" caption is only for an empty world.
     this.world.emptyHint = !this.model.count;
@@ -752,6 +893,16 @@ class App {
     const stepNow = this.model.steps[target];
     this.world.setScene(state, this.model.classes, stepNow ? stepNow.locals : [], stepNow ? stepNow.func : "");
     if (animate && forward) this.world.animateEvents(this.model.eventsAt(target), state);
+    // What the program did to the world of the level (night, lights…).
+    const scene = this.level && this.level.scene;
+    if (scene && scene.react && this.mode !== "snippet") {
+      this.world.applyReactions(reactionState(scene.react, this.model, target), animate && forward);
+    }
+    // A secret: a program that prints 42, the answer to everything.
+    if (animate && forward && this.model.eventsAt(target).some((ev) => ev.type === "print" && String(ev.text).trim() === "42")) {
+      this.world.answer42();
+      this.foundEgg("answer");
+    }
     const step = this.model.steps[target];
     if (step && step.file !== this.editor.active && this.editor.files[step.file] !== undefined) {
       this.editor.switchTo(step.file);
@@ -810,22 +961,273 @@ class App {
     if (target && (target.kind === "heart" || target.kind === "seal")) {
       heartPulse(this.world);
       sound.play(target.kind === "heart" ? "heartbeat" : "chime", { note: 72 + (target.id || 0) * 4 });
+<<<<<<< HEAD
       return;
     }
     if (target && target.kind === "npc") {
       // Clicking a character of the story: he tells his story again.
       if (!this.world.cinematic) this.replayStory();
+=======
+>>>>>>> c46f881 (lastfeatures)
       return;
     }
+    if (target && ["npc", "prop", "mob", "boss"].includes(target.kind)) {
+      // A character, a thing of the scenery, a creature: the camera goes
+      // there and a card tells who / what it is.
+      if (!this.world.cinematic) this.inspect(target);
+      return;
+    }
+    if (this.inspected) this.closeInspect();
     this.selected = target;
     this.world.select(target);
     if (target) document.querySelector('.tab[data-tab="inspector"]').click();
     this.renderSide();
   }
 
+  // ------------------------------------------- inspection of the scene
+  // A click on a character (or its name in the story), a thing of the
+  // scenery, a creature: the camera goes close, a card says who or what it
+  // is, and it reacts. ✕, Escape or a click elsewhere: back to the view
+  // the player had.
+  recenter() {
+    this.closeInspect();
+    this.world.recenter();
+  }
+
+  inspectNpc(id) {
+    if (this.world.cinematic) return;
+    this.inspect({ kind: "npc", id });
+  }
+
+  inspectAt(target) {
+    const w = this.world;
+    if (target.kind === "npc") {
+      const n = w.stageNpc(target.id);
+      return n && { at: [n.x + 0.5, n.y + 0.5, 1.2], zoom: 3.4 };
+    }
+    if (target.kind === "prop") {
+      const p = w.stage && w.stage.props[target.id];
+      return p && { at: [p.x + (p.cx || 0.5), p.y + (p.cy || 0.5), (p.top || 1) / 2], zoom: p.top > 2 ? 2.4 : 3 };
+    }
+    if (target.kind === "mob") {
+      const m = w.mobs.find((x) => x.id === target.id);
+      return m && { at: [m.x + 0.5 * m.scale, m.y + 0.5 * m.scale, 0.8 * m.scale], zoom: 3.2 };
+    }
+    if (target.kind === "boss" && w.boss) return { at: [...w.bossCenter(), 1.8], zoom: 2.2 };
+    return null;
+  }
+
+  inspect(target) {
+    const where = this.inspectAt(target);
+    if (!where) return;
+    const again = this.inspected && this.inspected.kind === target.kind && this.inspected.id === target.id;
+    this.inspected = target;
+    this.world.select(target);
+    this.world.focusOn(where.at, where.zoom);
+    if (target.kind === "npc") {
+      this.talk(target.id, again);
+    } else if (target.kind === "prop") {
+      this.touchProp(target.id, again);
+    } else if (target.kind === "mob") {
+      const m = this.world.mobs.find((x) => x.id === target.id);
+      m.reactAt = this.world.now();
+      const pitch = { Zombie: 120, Creeper: 300, Spider: 260, Golem: 90, Sheep: 420, Cow: 160, Pig: 340, Chicken: 700, Cat: 620, Wolf: 240, Bee: 800 }[m.model] || 220;
+      sound.play("creature", { pitch });
+    } else if (target.kind === "boss") {
+      this.world.boss.hit = this.world.now() - 200;
+      sound.play("creature", { pitch: 70 });
+    }
+    this.renderInspect();
+  }
+
+  closeInspect(quiet = false) {
+    if (!this.inspected) return;
+    this.inspected = null;
+    this.world.select(this.selected && !["npc", "prop", "mob", "boss"].includes(this.selected.kind) ? this.selected : null);
+    this.world.endFocus();
+    const card = $("world-card");
+    card.classList.add("hidden");
+    card.innerHTML = "";
+    if (!quiet) sound.play("tick");
+  }
+
+  // What a character says when the player comes to talk: the story while
+  // the mission is ahead, encouragement after a failed check, pride after
+  // success. Each click: the next line.
+  npcLine(n, again) {
+    const scene = this.level.scene;
+    const passed = !!(this.progress.levels[this.level.id] || {}).mission_passed;
+    this.talks = this.talks || {};
+    const key = `${this.level.id}:${n.id}`;
+    const count = (this.talks[key] = (this.talks[key] || 0) + (again ? 1 : 0));
+    if (count === 6) {
+      this.foundEgg("peer");
+      return EGGS.peer;
+    }
+    const mine = scene.intro.filter(([who]) => who === n.id).map(([, text]) => text);
+    if (passed && scene.success[0] === n.id && count === 0) return scene.success[1];
+    if (this.lastCheck === "fail" && count === 0) {
+      if (scene.fail && scene.fail[0] === n.id) return `${scene.fail[1]} Relis le message de la vérification : il dit ce qui manque.`;
+      return "Ce n'est pas encore ça… mais chaque essai t'apprend quelque chose. Lis bien ce que la vérification te dit.";
+    }
+    if (passed) {
+      const after = ["Grâce à toi, tout fonctionne ici.", "Tu peux continuer ton voyage : la suite t'attend sur la carte.", ...mine];
+      return after[count % after.length];
+    }
+    if (!mine.length) return "Bonne chance pour ta mission ! Je suis là si tu as besoin.";
+    return mine[count % mine.length];
+  }
+
+  talk(id, again) {
+    const n = this.world.stageNpc(id);
+    if (!n) return;
+    const line = this.npcLine(n, again);
+    this.currentLine = line;
+    this.world.npcSay(id, line);
+    this.world.npcPose(id, again ? "talk" : "cheer", 1200);
+  }
+
+  missionRole(n) {
+    const scene = this.level.scene;
+    const level = this.level;
+    const parts = [];
+    const asks = (level.stdin || []).length || Object.values(level.starter || {}).some((code) => /input\(/.test(code));
+    if (scene.answers === n.id && asks) parts.push("c'est lui qui répond aux questions que ton programme pose avec input()");
+    if (scene.argv_by === n.id && (level.argv || []).length) parts.push("c'est lui qui donne les arguments de la ligne de commande (sys.argv)");
+    if (scene.success && scene.success[0] === n.id) parts.push(`c'est lui qui jugera le résultat de « ${level.mission_title} »`);
+    if (!parts.length) parts.push("il te raconte l'histoire du niveau et t'accompagne");
+    const text = parts.join(" ; ");
+    return text.charAt(0).toUpperCase() + text.slice(1) + ".";
+  }
+
+  propContext(prop) {
+    const look = this.world.propLook(prop);
+    this.books = this.books || 0;
+    return {
+      label: prop.label,
+      on: prop.type === "lantern" ? look.lit !== false : look.on,
+      open: look.open ?? (prop.type === "chest" ? !look.on : false),
+      count: look.count || prop.n || 1,
+      level: this.level,
+      contents: chestContents(this.level.id, prop.index || 0),
+      book: BOOKS[this.books % BOOKS.length],
+      time: "4 h 42",
+    };
+  }
+
+  // A click on a thing of the scenery: it reacts (a sound, a jump), and
+  // some of them hide a secret.
+  touchProp(index, again) {
+    const prop = this.world.stage.props[index];
+    prop.pulseAt = this.world.now();
+    this.propSecret = null;
+    const theme = this.world.themeName;
+    switch (prop.type) {
+      case "well": sound.play("splash"); this.propSecret = "piscine"; break;
+      case "clock": sound.play("tick"); this.propSecret = "clock"; break;
+      case "bookshelf":
+        if (again) this.books = (this.books || 0) + 1;
+        sound.play("page");
+        if (BOOKS[(this.books || 0) % BOOKS.length].includes("42")) this.propSecret = "guide";
+        break;
+      case "dummy": sound.play("shield"); if (again) this.propSecret = "marvin"; break;
+      case "cauldron": sound.play("pop"); if (again) this.propSecret = "moulinette"; break;
+      case "rocks": sound.play("clang"); if (theme === "mine") this.propSecret = "segfault"; break;
+      case "anvil": case "forge": sound.play("clang"); break;
+      case "furnace": case "campfire": case "torch": case "lantern": sound.play("ignite", { gain: 0.4 }); break;
+      case "chest": case "gate": case "house": sound.play("door"); break;
+      default: sound.play("click");
+    }
+    if (this.propSecret) this.foundEgg(this.propSecret);
+  }
+
+  togglePropOpen(index) {
+    const prop = this.world.stage.props[index];
+    const now = this.propContext(prop).open;
+    prop.click.open = !now;
+    prop.pulseAt = this.world.now();
+    sound.play("door");
+    if (prop.type === "chest" && !now) this.world.particles.burst(this.world.propTop(prop), { count: 14, colors: ["#f2c14e", "#fff3c0"], speed: 50, up: 60, gravity: 60, size: 3, glow: true });
+    this.renderInspect();
+  }
+
+  foundEgg(id) {
+    this.eggs = this.eggs || new Set();
+    if (this.eggs.has(id)) return;
+    this.eggs.add(id);
+    api("/api/event", { kind: "egg", id }).catch(() => {});
+  }
+
+  renderInspect() {
+    const card = $("world-card");
+    const t = this.inspected;
+    if (!t) return;
+    card.innerHTML = "";
+    const close = el("button", { class: "wc-close", title: "Fermer (Échap) — la caméra revient où elle était", onclick: () => this.closeInspect() }, "✕");
+    const head = (icon, name, sub) => el("div", { class: "wc-head" },
+      el("span", { class: "wc-icon" }, icon),
+      el("div", { class: "wc-title" }, el("b", {}, name), sub ? el("small", {}, sub) : ""),
+      close);
+    const row = (label, text, cls = "") => el("p", { class: `wc-row ${cls}` }, el("b", {}, label), " ", text);
+    if (t.kind === "npc") {
+      const n = this.world.stageNpc(t.id);
+      const who = CHARACTERS[n.skin] || { role: "Habitant", about: "", temper: "" };
+      card.append(head(n.skin && this.world.skinIcon(n.skin), n.name, who.role));
+      if (who.about) card.append(el("p", { class: "wc-about" }, who.about));
+      if (who.temper) card.append(row("Caractère :", who.temper));
+      card.append(el("div", { class: "wc-say" }, `💬 « ${this.currentLine || ""} »`));
+      card.append(row("🎯 Dans ta mission :", this.missionRole(n)));
+      card.append(el("div", { class: "wc-actions" },
+        el("button", { class: "mc-btn small", onclick: () => { this.talk(n.id, true); this.renderInspect(); } }, "💬 Lui parler"),
+        el("button", { class: "mc-btn small ghost", onclick: () => { this.closeInspect(true); this.replayStory(); } }, "🎬 Revoir la scène")));
+      const others = this.world.stage.npcs.filter((o) => o.id !== n.id);
+      if (others.length) {
+        card.append(el("div", { class: "wc-chips" }, el("span", { class: "muted small" }, "Aussi ici :"),
+          ...others.map((o) => el("button", { class: "chip", onclick: () => this.inspect({ kind: "npc", id: o.id }) }, `${this.world.skinIcon(o.skin)} ${o.name}`))));
+      }
+    } else if (t.kind === "prop") {
+      const prop = this.world.stage.props[t.id];
+      const info = propInfo(prop.type);
+      const ctx = this.propContext(prop);
+      card.append(head(info.icon, prop.label ? `${info.name} — ${prop.label}` : info.name, "Élément du décor"));
+      card.append(el("p", { class: "wc-about" }, info.info(ctx)));
+      if (this.propSecret) card.append(el("div", { class: "wc-say wc-secret" }, `✨ ${EGGS[this.propSecret]}`));
+      if (prop.code && Object.keys(prop.code).length) {
+        card.append(el("p", { class: "wc-row small muted" }, "⚙ Son état vient de ton programme : il change quand le code s'exécute."));
+      }
+      if (info.act === "open") {
+        card.append(el("div", { class: "wc-actions" },
+          el("button", { class: "mc-btn small", onclick: () => this.togglePropOpen(t.id) }, info.button(ctx))));
+      }
+      if (prop.type === "bookshelf") {
+        card.append(el("div", { class: "wc-actions" },
+          el("button", { class: "mc-btn small", onclick: () => this.inspect(t) }, "📖 Prendre un autre livre")));
+      }
+    } else if (t.kind === "mob") {
+      const m = this.world.mobs.find((x) => x.id === t.id);
+      if (!m) return this.closeInspect(true);
+      const info = creatureOf(m.model);
+      const scared = m.react && this.world.nightLevel() > 0.5;
+      card.append(head("👾", info.name, m.react ? "Attirée par ce que fait ton programme" : "Créature"));
+      card.append(el("p", { class: "wc-about" }, scared ? "Elle rôde dans le noir autour du village. La lumière la fait fuir : ton programme sait quoi faire…" : info.about));
+      card.append(el("div", { class: "wc-actions" },
+        el("button", { class: "mc-btn small", onclick: () => this.inspect(t) }, "👋 L'observer encore")));
+    } else if (t.kind === "boss") {
+      const b = this.world.boss;
+      card.append(head("💀", b.name, "Gardien du niveau"));
+      card.append(el("p", { class: "wc-about" }, "Chaque vérification réussie de ta mission le blesse. Réussis-les toutes pour le vaincre."));
+      card.append(row("❤ Vie :", `${b.hp} / ${b.total}`));
+    }
+    card.classList.remove("hidden");
+  }
+
   hover(target, e) {
     const tip = $("tooltip");
+<<<<<<< HEAD
     if (!target || (!this.state && !["npc", "heart", "seal"].includes(target.kind))) {
+=======
+    if (!target || (!this.state && !["npc", "heart", "seal", "prop", "mob", "boss"].includes(target.kind))) {
+>>>>>>> c46f881 (lastfeatures)
       tip.classList.add("hidden");
       return;
     }
@@ -836,7 +1238,26 @@ class App {
       html = `<b>${esc(sealInfo(target.id))}</b><br><i>Un des quatre sceaux du Cœur.</i>`;
     } else if (target.kind === "npc") {
       const npc = this.world.stageNpc(target.id);
-      html = `<b>${esc(npc ? npc.name : "")}</b><br>Personnage de l'histoire.<br><i>Clique pour réécouter ce qu'il dit.</i>`;
+      const who = npc && CHARACTERS[npc.skin];
+      html = `<b>${esc(npc ? npc.name : "")}</b>${who ? ` · ${esc(who.role)}` : ""}<br><i>Clique pour le voir de près et lui parler.</i>`;
+    } else if (target.kind === "prop") {
+      const prop = this.world.stage && this.world.stage.props[target.id];
+      if (!prop) return;
+      const info = propInfo(prop.type);
+      html = `<b>${info.icon} ${esc(prop.label || info.name)}</b><br><i>Clique pour l'examiner.</i>`;
+    } else if (target.kind === "mob") {
+      const mob = this.world.mobs.find((m) => m.id === target.id);
+      if (!mob) return;
+      // Coming near a creature: it notices the mouse (a hop, at most every
+      // two seconds).
+      const now = this.world.now();
+      if (!mob.noticed || now - mob.noticed > 2000) {
+        mob.noticed = now;
+        mob.reactAt = now;
+      }
+      html = `<b>${esc(creatureOf(mob.model).name)}</b><br><i>Clique pour l'observer.</i>`;
+    } else if (target.kind === "boss") {
+      html = `<b>${esc(this.world.boss ? this.world.boss.name : "Boss")}</b><br><i>Le gardien de ce niveau. Clique pour l'observer.</i>`;
     } else if (target.kind === "object") {
       const obj = this.state.objects.get(target.id);
       if (!obj) return;
@@ -903,6 +1324,7 @@ class App {
       if (res.passed) this.world.celebrate();
       this.world.unfocus();
       this.world.npcReact(res.passed);
+      this.lastCheck = res.passed ? "ok" : "fail";
       res.xp_gained.forEach((g) => toast(`+${g.xp} XP — ${g.label}`, "xp"));
       res.rewards.forEach((r) => toast(`🏆 Récompense : ${r}`, "xp"));
       this.lesson.render();

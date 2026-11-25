@@ -15,26 +15,50 @@ QUIZ_FIRST_TRY_XP = 20
 QUIZ_RETRY_XP = 5
 
 
+def readable_save(data: Any) -> bool:
+    """A save this version of the game can load (the bare minimum)."""
+    return (isinstance(data, dict) and data.get("version") == SAVE_VERSION
+            and isinstance(data.get("xp"), (int, float))
+            and isinstance(data.get("levels"), dict))
+
+
 class ProgressStore:
     """Thread-safe JSON save file."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
         self.lock = threading.Lock()
+        # A save that could not be loaded is kept aside (see _load): its
+        # file name and the time, for the admin panel.
+        self.set_aside: dict[str, Any] | None = None
         self.data = self._load()
 
     # ------------------------------------------------------------ files
     def _load(self) -> dict[str, Any]:
         if self.path.exists():
             try:
-                data: dict[str, Any] = json.loads(
-                    self.path.read_text(encoding="utf-8"))
-                if data.get("version") == SAVE_VERSION:
-                    return data
-            except (OSError, json.JSONDecodeError):
-                backup = self.path.with_suffix(".corrupt.json")
-                self.path.replace(backup)
+                data: Any = json.loads(self.path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                self._keep_aside("illisible")
+                return self._fresh()
+            if readable_save(data):
+                return data  # type: ignore[no-any-return]
+            version = data.get("version") if isinstance(data, dict) else None
+            self._keep_aside("illisible" if version == SAVE_VERSION
+                             or version is None else f"version-{version}")
         return self._fresh()
+
+    def _keep_aside(self, kind: str) -> None:
+        """Never lose a save that cannot be loaded: it is renamed with the
+        time (progress.illisible-20261125-143000.json), never overwritten."""
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        target = self.path.with_name(f"{self.path.stem}.{kind}-{stamp}.json")
+        try:
+            self.path.replace(target)
+        except OSError:
+            return
+        self.set_aside = {"file": target.name, "kind": kind,
+                          "time": time.time()}
 
     @staticmethod
     def _fresh() -> dict[str, Any]:
@@ -53,6 +77,41 @@ class ProgressStore:
             self.data = self._fresh()
             self.save()
 
+    def clear(self, keep_code: bool = False) -> None:
+        """A fresh start (the caller holds the lock). keep_code: the code
+        saved in each level stays."""
+        old = self.data["levels"]
+        self.data = self._fresh()
+        if keep_code:
+            for level_id, state in old.items():
+                if level_id in LEVELS and (state.get("code")
+                                           or state.get("sandbox")):
+                    fresh = self.level(level_id)
+                    for slot in ("code", "sandbox"):
+                        if state.get(slot):
+                            fresh[slot] = state[slot]
+
+    def restart_level(self, level_id: str, keep_code: bool = True) -> int:
+        """Puts one level back to zero (the caller holds the lock); its XP
+        leaves the total. Returns the XP removed. (The levels after it may
+        lock again: see Admin.restart, which keeps them open.)"""
+        old = self.data["levels"].pop(level_id, None) or {}
+        removed = int(sum(old.get("xp", {}).values()))
+        self.data["xp"] = max(0, int(self.data["xp"]) - removed)
+        if keep_code:
+            for slot in ("code", "sandbox"):
+                if old.get(slot):
+                    self.level(level_id)[slot] = old[slot]
+        return removed
+
+    def recompute_rewards(self) -> None:
+        """Rewards of regions that are no longer complete leave the list."""
+        self.data["rewards"] = [
+            region.reward for region in REGIONS
+            if region.reward in self.data["rewards"]
+            and all(self.status(lvl.id) in ("completed", "mastered")
+                    for lvl in region.levels)]
+
     # ----------------------------------------------------------- levels
     def level(self, level_id: str) -> dict[str, Any]:
         levels: dict[str, Any] = self.data["levels"]
@@ -66,10 +125,25 @@ class ProgressStore:
 
     def is_unlocked(self, level_id: str) -> bool:
         index = ORDER.index(level_id)
-        if index == 0:
+        if index == 0 or self.admin_opens(index):
             return True
         previous = ORDER[index - 1]
         return self.status(previous) in ("completed", "mastered")
+
+    # The organizer can open levels for a participant (admin panel, see
+    # server/admin.py) without marking anything as done: no XP, no reward,
+    # no achievement. A save without the "admin" block follows the normal
+    # rule only.
+    def admin(self) -> dict[str, Any]:
+        block = self.data.get("admin")
+        return block if isinstance(block, dict) else {}
+
+    def admin_opens(self, index: int) -> bool:
+        block = self.admin()
+        if block.get("all_unlocked"):
+            return True
+        through = block.get("unlocked_through")
+        return through in LEVELS and index <= ORDER.index(through)
 
     def quiz_done(self, level_id: str) -> bool:
         state = self.data["levels"].get(level_id, {})
@@ -161,4 +235,6 @@ class ProgressStore:
             "level_floor": floor_xp, "level_next": next_xp,
             "levels": levels, "rewards": self.data["rewards"],
             "notions": self.notion_states(),
+            "admin": {key: self.admin().get(key) for key in
+                      ("unlocked_through", "all_unlocked", "start_level")},
         }

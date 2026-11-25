@@ -59,10 +59,7 @@ print(zombie_1.speed, zombie_2.speed)
         "Lignes 5-6 : deux zombies distincts sortent du même plan.",
         "Lignes 8-10 : chaque attribut s'accroche à UN zombie. Clique sur un zombie pour l'inspecter.",
     ],
-    experiments=[
-        "Ajoute `print(zombie_2.name)`. Quelle erreur, et pourquoi ?",
-        "Écris `zombie_3 = zombie_1` puis `zombie_3.speed = 9`. Combien de zombies dans le monde ? Que vaut `zombie_1.speed` ?",
-    ],
+    experiments=[],
     mission_title="La bergerie",
     mission="""Le berger a besoin d'un plan de mouton.
 
@@ -191,10 +188,7 @@ print(steve.can_carry(40), alex.can_carry(40))
         "La même méthode produit deux résultats différents : chacun lit SES attributs.",
         "`can_carry` ne change rien : elle renvoie une réponse (bulle de retour).",
     ],
-    experiments=[
-        "Retire `self` de la définition de `attack`. Lis l'erreur : combien d'arguments Python a-t-il passés ?",
-        "Appelle `Player.attack(alex)` : que constates-tu ?",
-    ],
+    experiments=[],
     mission_title="Le comptoir des villageois",
     mission="""Crée une classe `Villager` (toujours sans constructeur) avec deux méthodes :
 
@@ -325,10 +319,7 @@ print(f"Rapide : {fast.distance} blocs, lent : {slow.distance} blocs")
         "Au 4e tour, la méthode refuse d'agir : l'état ne change plus.",
         "Même plan, vitesses différentes : les résultats divergent.",
     ],
-    experiments=[
-        "Retire `round(...)` et observe les distances du wagonnet lent.",
-        "Passe la boucle à `range(2)`. Pourquoi plus aucun message de panne ?",
-    ],
+    experiments=[],
     mission_title="La production de lingots",
     mission="""Crée une classe `Furnace` (sans constructeur ou avec, au choix) avec les attributs `fuel` (entier), `ingots` (nombre à virgule) et `speed` (lingots produits par cycle).
 
@@ -456,10 +447,7 @@ for member in team:
         "`kills` n'est pas un paramètre : il vaut 0 pour tout le monde au départ.",
         "La boucle appelle la même méthode sur chaque objet de la liste.",
     ],
-    experiments=[
-        "Crée `Player(\"Zed\")` avec un seul argument. Que dit l'erreur ?",
-        "Ajoute un 4e joueur dans la liste : combien de lignes faut-il modifier ailleurs ?",
-    ],
+    experiments=[],
     mission_title="La chaîne de pioches",
     mission="""Crée une classe `Pickaxe` :
 
@@ -578,7 +566,7 @@ bag.put("bread")
 print(bag.items)
 '''},
     demo_notes=["Observe le dictionnaire `items` évoluer dans l'inspecteur."],
-    experiments=["Que renvoie `bag.items.get(\"diamond\", 0)` ?"],
+    experiments=[],
     mission_title="L'inventaire incassable",
     mission="""Crée une classe `Inventory` :
 

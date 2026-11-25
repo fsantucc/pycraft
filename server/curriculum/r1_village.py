@@ -38,11 +38,7 @@ print(f"Marché ouvert : {marche_ouvert}")
         "Ligne 5 : la valeur de `habitants` est lue AVANT d'être remplacée.",
         "Ligne 8 : `habitants > 10` est calculé, le résultat est un booléen.",
     ],
-    experiments=[
-        "Remplace 12 par 5 : que devient `marche_ouvert` ?",
-        "Déplace la ligne 3 tout en haut du fichier. Quelle erreur obtiens-tu, et pourquoi ?",
-        "Ajoute une variable `forgerons = 2` et affiche-la dans une f-string.",
-    ],
+    experiments=[],
     mission_title="Le registre de la forge",
     mission="""Le forgeron veut un panneau qui calcule ses besoins en charbon.
 
@@ -172,11 +168,7 @@ if __name__ == "__main__":
         "Dans outils.py, `__name__` vaut 'outils' : le bloc du garde est sauté.",
         "`def main()` ne fait rien tout de suite : la fonction n'est exécutée qu'à la dernière ligne.",
     ],
-    experiments=[
-        "Dans outils.py, retire le `if __name__ ...` et dé-indente le print. Que se passe-t-il au moment de l'import ?",
-        "Change le fichier lancé : clique sur l'onglet outils.py puis « Exécuter ce fichier ». Que vaut `__name__` ?",
-        "Supprime l'appel `main()` en bas de main.py. Qu'est-ce qui s'affiche encore ?",
-    ],
+    experiments=[],
     mission_title="Le chantier sans accident",
     mission="""Deux fichiers :
 
@@ -303,10 +295,7 @@ if __name__ == "__main__":
         "Retire `-> int` à la ligne 4 et relance l'analyse.",
         "Le programme s'exécute pareil avec ou sans annotations : elles servent aux outils et aux lecteurs.",
     ],
-    experiments=[
-        "Renomme `door_count` en `DoorCount` et lance l'analyse qualité.",
-        "Appelle `door_count(\"6\", 2)` : Python l'exécute-t-il ? Que dirait mypy ?",
-    ],
+    experiments=[],
     mission_title="Désamorcer le script",
     mission="""Le script de départ fonctionne. Répare-le pour que :
 

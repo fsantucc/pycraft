@@ -48,11 +48,7 @@ print("Fin de la démonstration")
         "À chaque appel, l'exécution saute dans cloche.py puis revient dans main.py.",
         "La tour « pile d'appels » grandit pendant l'appel et redescend après.",
     ],
-    experiments=[
-        "Dans cloche.py, retire l'indentation du second print. Que se passe-t-il ?",
-        "Dans main.py, retire les parenthèses : `sonner_cloche` sans `()`. Python appelle-t-il la fonction ?",
-        "Ajoute un troisième appel.",
-    ],
+    experiments=[],
     readonly=["main.py"],
     mission_title="La lanterne du village",
     mission="""Dans le fichier `lanterne.py`, écris **uniquement** une fonction `allumer_lanterne()` qui affiche exactement ces deux lignes :
@@ -161,10 +157,7 @@ demander_age()
         "Regarde l'inspecteur : `texte` est une chaîne ('12'), `age` est un entier (12).",
         "`texte + \"10\"` colle les textes, `age + 10` additionne.",
     ],
-    experiments=[
-        "Change l'entrée en `abc`. Quelle erreur, et à quelle ligne ?",
-        "Supprime la ligne d'entrée. Que se passe-t-il ?",
-    ],
+    experiments=[],
     stdin=["3", "5"],
     mission_title="La commande de torches",
     mission="""Dans `torches.py`, écris une fonction `commande_torches()` qui :
@@ -273,10 +266,7 @@ verifier_lumiere()
 '''},
     demo_stdin=["9"],
     demo_notes=["Pas à pas : regarde quelles lignes sont exécutées et lesquelles sont sautées."],
-    experiments=[
-        "Essaie les entrées 7, 8, 11, 12. Lesquelles changent le message ?",
-        "Inverse l'ordre des deux premières conditions. Le programme reste-t-il juste ?",
-    ],
+    experiments=[],
     mission_title="Le garde du pont",
     mission="""Dans `pont.py`, écris `garde_du_pont()` :
 
@@ -393,8 +383,7 @@ demo_boucles()
 '''},
     demo_notes=["Suis `i` et `total` dans l'inspecteur à chaque tour.",
                 "Pour le while, la condition est testée AVANT chaque tour."],
-    experiments=["Remplace `range(1, 4)` par `range(4)`. Qu'est-ce qui change ?",
-                 "Que se passe-t-il si `blocs` vaut 5 au départ ?"],
+    experiments=[],
     mission_title="Les tours de soutènement",
     mission="""Dans `tour.py`, écris deux fonctions :
 
@@ -516,8 +505,7 @@ print("1 + 2 + 3 =", somme(3))
 '''},
     demo_notes=["Observe la tour de la pile d'appels monter jusqu'à echo(0), puis redescendre.",
                 "Pour somme, regarde les valeurs renvoyées remonter : 0, puis 1, puis 3, puis 6."],
-    experiments=["Supprime le `return` de la ligne 4. Que se passe-t-il ?",
-                 "Appelle `echo(-1)`. Pourquoi ça ne s'arrête jamais ?"],
+    experiments=[],
     mission_title="Le signal de redstone",
     mission="""Dans `redstone.py` :
 
@@ -647,7 +635,7 @@ print(phrase.upper())
 print("Longueur :", len(phrase))
 '''},
     demo_notes=["Regarde que `nom` n'est pas modifié : strip() et capitalize() créent de nouvelles chaînes."],
-    experiments=["Appelle `presenter(12, \"alex\")`. Que dit Python ? Que dirait mypy (Analyse qualité) ?"],
+    experiments=[],
     mission_title="Le registre des aventuriers",
     mission="""Dans `registre.py`, avec des **annotations de type complètes** :
 

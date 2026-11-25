@@ -403,15 +403,22 @@ function torchAt(add, lights, x, y, z, lit, t) {
 
 // Each prop: (opts) => { parts, lights }. opts: { done, t, n, color }.
 export const PROPS = {
-  house({ done, t, n = 0 }) {
+  house({ done, t, n = 0, open = false }) {
     const p = [];
     const lights = [];
     const add = (...a) => p.push(B(...a));
     add(0, 0, 0, 2, 2, 0.15, COBBLE, "prop");
     add(0.1, 0.1, 0.15, 1.8, 1.8, 1.3, PLANK, "prop");
     for (const [x, y] of [[0.05, 0.05], [1.75, 0.05], [0.05, 1.75], [1.75, 1.75]]) add(x, y, 0.15, 0.2, 0.2, 1.35, DARK, "prop");
-    add(0.75, 1.901, 0.15, 0.5, 0.02, 0.8, DARK, "prop");
-    add(1.1, 1.92, 0.5, 0.06, 0.01, 0.06, "#f2c14e", "prop");
+    if (open) {
+      // The doorway (warm inside when someone is home), the door swung out.
+      add(0.75, 1.901, 0.15, 0.5, 0.02, 0.8, done ? "#ffcf7a" : "#1a1410", done ? "flame" : "prop");
+      add(0.72, 1.92, 0.15, 0.05, 0.48, 0.8, DARK, "prop");
+      add(0.66, 2.3, 0.5, 0.06, 0.06, 0.06, "#f2c14e", "prop");
+    } else {
+      add(0.75, 1.901, 0.15, 0.5, 0.02, 0.8, DARK, "prop");
+      add(1.1, 1.92, 0.5, 0.06, 0.01, 0.06, "#f2c14e", "prop");
+    }
     const win = done ? "#ffe08a" : "#2a3a4a";
     add(0.25, 1.902, 0.7, 0.35, 0.02, 0.35, win, done ? "flame" : "prop");
     add(1.902, 0.4, 0.7, 0.02, 0.35, 0.35, win, done ? "flame" : "prop");
@@ -430,9 +437,23 @@ export const PROPS = {
     torchAt((...a) => p.push(B(...a)), lights, 0.5, 0.5, 0, done, t);
     return { parts: p, lights };
   },
-  lantern({ t }) {
+  // lit: false → cold glass, no light. Just lit (since < 900 ms): the
+  // flame hesitates, flickers, then holds.
+  lantern({ t, lit = true, since = 1e9 }) {
     const p = [B(0.45, 0.45, 0, 0.1, 0.1, 1.4, "#3a3a3a", "prop"), B(0.45, 0.45, 1.4, 0.4, 0.1, 0.06, "#3a3a3a", "prop"),
-      B(0.68, 0.38, 1.0, 0.24, 0.24, 0.32, "#3a3a3a", "prop"), B(0.7, 0.4, 1.03, 0.2, 0.2, 0.26 + Math.sin(t / 300) * 0.01, "#ffd27a", "flame")];
+      B(0.68, 0.38, 1.0, 0.24, 0.24, 0.32, "#3a3a3a", "prop")];
+    if (lit === false) {
+      p.push(B(0.7, 0.4, 1.03, 0.2, 0.2, 0.26, "#4a5560", "prop"), B(0.77, 0.47, 1.03, 0.06, 0.06, 0.08, "#2a2a2a", "prop"));
+      return { parts: p, lights: [] };
+    }
+    const warm = since < 900 ? Math.min(1, since / 900) : 1;
+    const flicker = since < 900 && Math.sin(since / 35) * Math.sin(since / 90) < -0.2;
+    if (flicker) {
+      p.push(B(0.7, 0.4, 1.03, 0.2, 0.2, 0.26, "#8a6a3a", "prop"));
+      return { parts: p, lights: [] };
+    }
+    const h = (0.12 + 0.14 * warm) + Math.sin(t / 300) * 0.01;
+    p.push(B(0.7, 0.4, 1.03, 0.2, 0.2, 0.26, "#ffe9b0", "flame"), B(0.75, 0.45, 1.05, 0.1, 0.1, h, "#ffb347", "flame"));
     return { parts: p, lights: [[0.8, 0.5, 1.16, "#ffd27a"]] };
   },
   campfire({ t, done = true }) {
@@ -480,9 +501,9 @@ export const PROPS = {
       B(0.8, 0.53, 0.85, 0.55, 0.01, 0.4, "#f5ecd7", "prop"), B(-0.05, 0.38, 1.48, 1.62, 0.18, 0.08, "#a8322a", "prop")];
     return { parts: p, lights: [] };
   },
-  chest({ done }) {
+  chest({ done, open }) {
     const p = [B(0.1, 0.15, 0, 0.8, 0.7, 0.45, "#a0682a", "prop"), B(0.1, 0.849, 0.38, 0.8, 0.002, 0.04, "#3a2a1a", "prop")];
-    if (done) p.push(B(0.1, 0.15, 0.45, 0.8, 0.7, 0.2, "#b8783a", "prop"), B(0.44, 0.85, 0.4, 0.12, 0.03, 0.14, "#c9c9c9", "prop"));
+    if (!(open ?? !done)) p.push(B(0.1, 0.15, 0.45, 0.8, 0.7, 0.2, "#b8783a", "prop"), B(0.44, 0.85, 0.4, 0.12, 0.03, 0.14, "#c9c9c9", "prop"));
     else p.push(B(0.1, 0.0, 0.45, 0.8, 0.2, 0.6, "#b8783a", "prop"), B(0.3, 0.25, 0.4, 0.4, 0.4, 0.06, "#f2c14e", "prop"));
     return { parts: p, lights: [] };
   },
@@ -578,15 +599,18 @@ export const PROPS = {
     }
     return { parts: p, lights: done ? [[1, 0.55, 1.2, color]] : [] };
   },
-  gate() {
+  gate({ open = false } = {}) {
     const p = [B(0, 0.3, 0, 0.5, 0.5, 2.2, STONE, "prop"), B(1.6, 0.3, 0, 0.5, 0.5, 2.2, STONE, "prop"),
-      B(0, 0.3, 2.2, 2.1, 0.5, 0.45, shade(STONE, 1.05), "prop"), B(0.5, 0.35, 0, 1.1, 0.06, 1.9, "#4a3a2a", "prop")];
+      B(0, 0.3, 2.2, 2.1, 0.5, 0.45, shade(STONE, 1.05), "prop")];
+    // Closed: one wooden door. Open: two leaves swung back to the walls.
+    if (open) p.push(B(0.5, 0.35, 0, 0.06, 0.55, 1.9, "#4a3a2a", "prop"), B(1.54, 0.35, 0, 0.06, 0.55, 1.9, "#4a3a2a", "prop"));
+    else p.push(B(0.5, 0.35, 0, 1.1, 0.06, 1.9, "#4a3a2a", "prop"));
     for (let i = 0; i < 5; i += 1) p.push(B(0.05 + i * 0.45, 0.3, 2.65, 0.25, 0.5, 0.25, STONE, "prop"));
     return { parts: p, lights: [] };
   },
-  blocktower({ done, n = 4 }) {
+  blocktower({ done, n = 4, floors: built }) {
     const p = [];
-    const floors = done ? n : Math.max(1, Math.ceil(n / 2));
+    const floors = built ? Math.min(n + 3, built) : done ? n : Math.max(1, Math.ceil(n / 2));
     for (let i = 0; i < floors; i += 1) {
       const w = 1.4 - i * 0.18;
       p.push(B((1.4 - w) / 2, (1.4 - w) / 2, i * 0.5, w, w, 0.5, i % 2 ? "#8d7a5f" : "#a08a6a", "prop"));
@@ -718,7 +742,7 @@ export const PROPS = {
     return { parts: p, lights: [] };
   },
   tree() {
-    return { parts: [B(0.35, 0.35, 0, 0.3, 0.3, 1.5, "#6b4527", "prop"), B(-0.3, -0.3, 1.2, 1.6, 1.6, 1.0, LEAF, "prop"),
+    return { parts: [B(0.35, 0.35, 0, 0.3, 0.3, 1.2, "#6b4527", "prop"), B(-0.3, -0.3, 1.2, 1.6, 1.6, 1.0, LEAF, "prop"),
       B(0.05, 0.05, 2.2, 0.9, 0.9, 0.5, "#4f9a35", "prop")], lights: [] };
   },
   minecart() {

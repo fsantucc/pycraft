@@ -45,8 +45,7 @@ if __name__ == "__main__":
 '''},
     demo_notes=["Pas à pas sur « huit » : la ligne du print de la moitié est sautée.",
                 "Regarde l'éclair (levée) puis le filet (rattrapage) dans le monde."],
-    experiments=["Retire le try / except (et garde le corps). Où le programme s'arrête-t-il ?",
-                 "Remplace `except ValueError` par `except ZeroDivisionError`. Que se passe-t-il ?"],
+    experiments=[],
     mission_title="La sonde de profondeur",
     mission="""Dans `main.py` :
 
@@ -158,7 +157,7 @@ if __name__ == "__main__":
     main()
 '''},
     demo_notes=["L'exception levée dans `regler` traverse `piloter` sans s'y arrêter, puis est attrapée dans `main`."],
-    experiments=["Ajoute un try / except dans `piloter`. Qui attrape l'erreur maintenant ?"],
+    experiments=[],
     mission_title="Le trieur de piles",
     mission="""Dans `main.py` :
 
@@ -306,7 +305,7 @@ for n in range(3):
         print("Accès :", e.__class__.__name__, e)
 '''},
     demo_notes=["Chaque tour lève une exception différente : regarde quel except la récupère."],
-    experiments=["Supprime le except ZeroDivisionError. Que devient le tour n° 1 ?"],
+    experiments=[],
     mission_title="Réparer la machine",
     mission="""Dans `main.py` :
 
@@ -430,7 +429,7 @@ for erreur in (MineError(), EboulementError(), EboulementError("Galerie 3 bloqu�
 '''},
     demo_notes=["Les deux plans sont reliés par l'héritage (fil doré).",
                 "Un seul `except MineError` attrape les deux types."],
-    experiments=["Remplace `except MineError` par `except EboulementError`. Que se passe-t-il au premier tour ?"],
+    experiments=[],
     mission_title="Le circuit de redstone",
     mission="""Dans `main.py` :
 
@@ -546,7 +545,7 @@ print(tester(1))
 print(tester(0))
 '''},
     demo_notes=["Même avec un `return`, le finally s'exécute AVANT que la fonction ne rende la main."],
-    experiments=["Ajoute un `else:` qui affiche « tout va bien ». Quand s'affiche-t-il ?"],
+    experiments=[],
     mission_title="L'expédition dans le Nether",
     mission="""Dans `main.py` :
 

@@ -59,10 +59,15 @@ export class LessonPanel {
     root.innerHTML = "";
     if (!level) return;
     const st = this.levelState();
+    const notions = this.app.curriculum.notions || {};
     root.append(el("div", { class: "lesson-head" },
       el("div", { class: "region" }, `${region.name} · niveau ${level.number}`),
       el("h2", {}, level.title, level.boss ? el("span", { class: "boss-tag" }, "BOSS") : null),
-      el("div", { class: "small muted" }, `${STATUS_TEXT[st.status] || ""}${st.xp ? ` · ${st.xp} XP gagnés` : ""}`)));
+      el("div", { class: "small muted" }, `${STATUS_TEXT[st.status] || ""}${st.xp ? ` · ${st.xp} XP gagnés` : ""}`),
+      // Always visible: what this level is for, and where it leads.
+      el("div", { class: "objective" },
+        el("div", {}, el("span", { class: "obj-k" }, "📚 Tu apprends"), " ", level.notions.map((n) => notions[n] || n).join(" · ")),
+        el("div", {}, el("span", { class: "obj-k" }, "🎯 Ta mission"), " ", level.mission_title))));
     const stepper = el("div", { class: "stepper", role: "tablist" });
     const seen = st.steps_seen || [];
     STEPS.forEach((s, i) => {
@@ -127,8 +132,14 @@ export class LessonPanel {
     const scene = level.scene || {};
     if (scene.intro && scene.intro.length) {
       const names = Object.fromEntries((scene.npcs || []).map((n) => [n.id, n.name]));
+      // Who lives here: a click on a name = a click on the character.
+      body.append(el("div", { class: "npc-row" }, el("span", { class: "muted small" }, "👥 Rencontre les habitants :"),
+        ...(scene.npcs || []).map((n) => el("button", { class: "npc-link chip", title: "La caméra va vers ce personnage", onclick: () => this.app.inspectNpc(n.id) }, n.name))));
       const talk = el("details", { class: "card dialogue" }, el("summary", {}, "💬 Ce que disent les personnages"));
-      scene.intro.forEach(([who, text]) => talk.append(el("p", { class: "line" }, el("b", {}, `${names[who] || who} : `), text)));
+      // A click on a name: the camera goes to that character (as a click on
+      // the character in the world).
+      scene.intro.forEach(([who, text]) => talk.append(el("p", { class: "line" },
+        el("button", { class: "npc-link", title: "Voir ce personnage", onclick: () => this.app.inspectNpc(who) }, `${names[who] || who}`), " : ", text)));
       body.append(talk);
     }
     body.append(el("div", { class: "card" },
@@ -201,18 +212,54 @@ export class LessonPanel {
 
   render_experiment(body) {
     const { level } = this.app;
-    body.append(el("p", {}, "Le code est à toi : modifie-le, exécute (Ctrl+Entrée), observe. Tu ne peux rien casser."));
-    if (level.experiments.length) {
-      const card = el("div", { class: "card" }, el("h4", {}, "🧪 Essais proposés"));
-      const ul = el("ul");
-      level.experiments.forEach((x) => ul.append(el("li", { html: md(x).replace(/^<p>|<\/p>$/g, "") })));
-      card.append(ul);
-      body.append(card);
+    body.append(el("p", {}, "Le code de la démo est à toi : chaque essai change ", el("b", {}, "une seule chose"),
+      ". Fais la modification, ", el("b", {}, "prédis"), " le résultat, exécute (Ctrl+Entrée), puis compare. Tu ne peux rien casser : ↺ remet la démo d'origine."));
+    this.feedback = el("div", { class: "xp-feedback" });
+    body.append(this.feedback);
+    this.showFeedback();
+    if (!level.experiments.length) {
+      body.append(el("p", { class: "muted" }, "Pas d'essai guidé ici : ce niveau est un projet libre. Passe à la mission."));
     }
-    body.append(el("p", { class: "small muted" }, "Avant chaque exécution, essaie de prédire ce que le monde va faire. Puis compare."));
+    level.experiments.forEach((x, i) => body.append(this.experimentCard(x, i)));
     body.append(el("div", { class: "next-row" },
       el("button", { class: "tiny", onclick: () => this.app.resetDemo() }, "↺ Revenir à la démo d'origine")));
     body.append(this.next("Passer à la mission →", "mission"));
+  }
+
+  // One guided experiment: what to change, what to predict, then (on
+  // demand, after running) what happens and why.
+  experimentCard(x, i) {
+    if (typeof x === "string") return el("div", { class: "card xp-card" }, el("div", { html: md(x) }));
+    const open = el("details", { class: "xp-answer" },
+      el("summary", {}, "👀 Ce que tu devrais observer, et pourquoi"),
+      el("p", {}, el("b", {}, "Ce que tu observes : "), el("span", { html: md(x.see).replace(/^<p>|<\/p>$/g, "") })),
+      el("p", {}, el("b", {}, "💡 Pourquoi : "), el("span", { html: md(x.why).replace(/^<p>|<\/p>$/g, "") })));
+    const actions = el("div", { class: "xp-actions" });
+    if (x.patch) {
+      actions.append(el("button", { class: "tiny", title: "Le jeu fait la modification dans l'éditeur et te montre la ligne",
+        onclick: () => this.app.applyExperiment(x) }, "✏️ Faire la modification pour moi"));
+    }
+    actions.append(el("button", { class: "tiny", onclick: () => this.app.runCurrent() }, "▶ Exécuter"),
+      el("button", { class: "tiny", onclick: () => this.app.resetDemo() }, "↺ Démo d'origine"));
+    return el("div", { class: "card xp-card" },
+      el("div", { class: "xp-head" }, el("span", { class: "xp-num" }, String(i + 1)), el("b", {}, "À faire")),
+      el("div", { class: "xp-do", html: md(x.do) }),
+      el("div", { class: "xp-predict" }, "🤔 ", el("b", {}, "Prédis d'abord : "), x.predict),
+      actions, open);
+  }
+
+  // After each run of the demo in this step: what the change did, compared
+  // with the original demonstration.
+  showFeedback() {
+    const box = this.feedback;
+    if (!box) return;
+    const fb = this.app.experimentResult;
+    box.innerHTML = "";
+    if (!fb || fb.level !== this.app.level.id) return;
+    const card = el("div", { class: `card xp-result ${fb.kind}` }, el("h4", {}, fb.title));
+    fb.lines.forEach((line) => card.append(el("div", { class: `xp-line ${line.cls || ""}` }, line.text)));
+    if (fb.note) card.append(el("p", { class: "small muted" }, fb.note));
+    box.append(card);
   }
 
   render_mission(body, st) {

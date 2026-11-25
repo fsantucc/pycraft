@@ -49,10 +49,7 @@ print(wire.output())
         "Lignes 13-14 : aucun objet dans le monde, seul le plan travaille.",
         "Ligne 16 : l'objet réutilise la méthode statique pour son propre calcul.",
     ],
-    experiments=[
-        "Retire `@staticmethod` puis appelle `Redstone.signal_after(4)`. Lis l'erreur.",
-        "Ajoute `self` en premier paramètre de signal_after (avec le décorateur). Que reçoit-il ?",
-    ],
+    experiments=[],
     mission_title="Le portail du Nether",
     mission="""Crée une classe `NetherPortal` :
 
@@ -172,9 +169,7 @@ print(type(basic).__name__, type(splash).__name__)
         "Pendant `SplashPotion.water()`, l'inspecteur montre `cls = SplashPotion`.",
         "Le rayon bleu va du plan vers la nouvelle potion : c'est `cls(...)` qui l'a créée.",
     ],
-    experiments=[
-        "Remplace `cls(` par `Potion(` dans water. Quel type obtient `splash` ?",
-    ],
+    experiments=[],
     mission_title="L'officine de l'alchimiste",
     mission="""Crée une classe `Potion(name: str, duration: int, strength: int)` (attributs du même nom), avec :
 

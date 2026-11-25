@@ -20,6 +20,7 @@
   <nav>
     <button id="btn-map" class="mc-btn">Carte du monde</button>
     <button id="btn-progress" class="mc-btn">Progression</button>
+    <button id="btn-admin" class="mc-btn admin-btn" title="Outils de l'organisateur de l'atelier (mot de passe)">Admin</button>
     <button id="btn-trailer" class="mc-btn icon" title="Revoir la bande-annonce du jeu">🎬</button>
     <button id="btn-tour" class="mc-btn icon" title="Visite guidée de l'interface">?</button>
     <button id="btn-sound" class="mc-btn icon" title="Couper les sons">🔊</button>
@@ -79,12 +80,13 @@
         </div>
         <div class="cam">
           <button id="cam-rot" class="tiny" title="Pivoter la vue">⟳</button>
-          <button id="cam-in" class="tiny">＋</button>
-          <button id="cam-out" class="tiny">－</button>
-          <button id="cam-home" class="tiny" title="Recentrer">⌂</button>
+          <button id="cam-in" class="tiny" title="Zoomer (ou molette)">＋</button>
+          <button id="cam-out" class="tiny" title="Dézoomer (ou molette)">－</button>
+          <button id="cam-home" class="tiny" title="Recentrer la carte (touche Début / Home)">⌂</button>
         </div>
       </div>
       <div id="tooltip" class="tooltip hidden"></div>
+      <div id="world-card" class="world-card hidden" role="dialog" aria-label="Fiche"></div>
       <div id="world-banner" class="world-banner hidden"></div>
     </div>
     <div id="timeline">

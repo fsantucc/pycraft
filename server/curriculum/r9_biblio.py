@@ -38,8 +38,7 @@ if arguments:
 '''},
     demo_argv=["bonjour", "le", "monde"],
     demo_notes=["La liste `arguments` apparaît comme une étagère : chaque case a son index."],
-    experiments=["Change les arguments (sous l'éditeur), relance.",
-                 "Supprime tous les arguments : que devient `arguments` ?"],
+    experiments=[],
     mission_title="L'interpréteur de commandes",
     mission="""Écris `main.py` (avec `import sys` et un garde `__main__`) :
 
@@ -129,7 +128,7 @@ print(propres, "→ trié :", sorted(propres))
 print("min", min(propres), "max", max(propres), "somme", sum(propres))
 '''},
     demo_notes=["Regarde l'étagère `propres` se remplir case par case."],
-    experiments=["Remplace `sorted(propres)` par `propres.sort()` puis affiche `propres`. Différence ?"],
+    experiments=[],
     mission_title="Le podium du dragon",
     mission="""`main.py` reçoit des temps en secondes dans `sys.argv` :
 
@@ -235,7 +234,7 @@ except TypeError as e:
     print("Impossible :", e)
 '''},
     demo_notes=["Le tuple est une tablette de pierre : rien ne peut changer ses cases."],
-    experiments=["Transforme `pos` en liste `[3.0, 4.0, 12.0]` : la ligne 8 échoue-t-elle encore ?"],
+    experiments=[],
     mission_title="Le compas du Nether",
     mission="""Dans `main.py` :
 
@@ -340,7 +339,7 @@ print("Sans doublons :", sorted(set(doublons)))
 print("Ensemble vide :", set())
 '''},
     demo_notes=["Les sacs n'ont pas de numéros de case : un set n'a pas d'ordre."],
-    experiments=["Affiche `alex` directement (sans sorted) plusieurs fois après avoir relancé. L'ordre est-il garanti ?"],
+    experiments=[],
     mission_title="La carte des explorateurs",
     mission="""Le code de départ fournit `TOUS_LES_BIOMES` (liste de 12 biomes). Écris :
 
@@ -465,7 +464,7 @@ print(list(inventaire.keys()))
 print(sum(inventaire.values()), "objets au total")
 '''},
     demo_notes=["Les tiroirs de l'armoire `inventaire` changent quand on modifie une clé."],
-    experiments=["Remplace `inventaire.get(ingredient, 0)` par `inventaire[ingredient]` et ajoute un ingrédient absent à la recette."],
+    experiments=[],
     mission_title="L'établi automatique",
     mission="""Dans `main.py` :
 
@@ -600,7 +599,7 @@ for valeur in gen:
 '''},
     demo_notes=["Pas à pas : l'exécution saute dans le générateur à chaque next(), puis revient.",
                 "Les variables du générateur (n) sont conservées entre deux pauses."],
-    experiments=["Retire le `break` : que se passerait-il ?"],
+    experiments=[],
     mission_title="Les vagues de la Source",
     mission="""Dans `main.py` :
 
@@ -724,7 +723,7 @@ print(longueurs)
 print(sorted(lettres))
 '''},
     demo_notes=["Chaque compréhension crée une nouvelle collection : regarde-la apparaître d'un coup."],
-    experiments=["Réécris `deja_propres` avec une boucle for et append. Combien de lignes ?"],
+    experiments=[],
     mission_title="Le grimoire des mobs",
     mission="""Le code de départ fournit `MOBS`, une liste de chaînes `nom:pv:hostile` (les noms ont des majuscules aléatoires). Écris chaque fonction avec **une compréhension** et **sans boucle for/while classique** :
 

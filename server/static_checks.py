@@ -381,8 +381,8 @@ def run_rule(rule: str, args: dict[str, Any],
                 else func.lineno
         return bool(loops), f"`{args['name']}` doit utiliser une boucle.", \
             func.lineno
-    if rule in ("has_node", "lacks_node", "except_tuple", "has_finally", "no_for_stmt",
-                "no_call", "count_handlers"):
+    if rule in ("has_node", "lacks_node", "except_tuple", "has_finally",
+                "no_for_stmt", "no_call", "count_handlers"):
         scope: ast.AST = tree
         where = filename
         if args.get("name"):

@@ -17,6 +17,11 @@ if TYPE_CHECKING:
 
 MAX_PING_SECONDS = 60
 
+# Little secrets of the world (a nod to 42): the browser reports which one
+# the player found; only these ids are accepted.
+EGGS = ("piscine", "clock", "guide", "peer", "marvin", "segfault",
+        "answer", "moulinette")
+
 
 @dataclass(frozen=True)
 class Achievement:
@@ -129,6 +134,14 @@ ACHIEVEMENTS: list[Achievement] = [
                 "Maîtriser 10 niveaux (quiz parfaits, au plus 1 indice).",
                 "La couronne se mérite.",
                 lambda _, st: _mastered(st) >= 10),
+    Achievement("egg_first", "🥚", "Curieux",
+                "Trouver un des secrets cachés dans le monde.",
+                "Le monde est plein de détails… clique partout.",
+                lambda s, _: len(s["eggs"]) >= 1),
+    Achievement("egg_42", "🌌", "La grande question",
+                "Trouver 5 secrets cachés dans le monde.",
+                "La réponse est quelque part entre 41 et 43.",
+                lambda s, _: len(s["eggs"]) >= 5),
 ]
 
 BY_ID = {a.id: a for a in ACHIEVEMENTS}
@@ -140,7 +153,7 @@ def stats(store: "ProgressStore") -> dict[str, Any]:
     defaults: dict[str, Any] = {
         "runs": 0, "errors": {}, "fixed": 0, "first_try": 0, "stubborn": 0,
         "steps": 0, "spots": 0, "tour_done": False, "night": False,
-        "days": [], "time": {}, "broken": {},
+        "days": [], "time": {}, "broken": {}, "eggs": [],
     }
     for key, value in defaults.items():
         if key not in data:
@@ -211,6 +224,12 @@ def record_event(store: "ProgressStore", kind: str,
         st["spots"] += 1
     elif kind == "tour":
         st["tour_done"] = True
+    elif kind == "egg":
+        egg = str(data.get("id", ""))
+        if egg not in EGGS:
+            raise ValueError("Secret inconnu.")
+        if egg not in st["eggs"]:
+            st["eggs"].append(egg)
     elif kind == "session":
         day = str(data.get("date", ""))[:10]
         if day and day not in st["days"]:

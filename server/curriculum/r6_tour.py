@@ -2,7 +2,7 @@
 relations entre objets, fonctions indépendantes."""
 from __future__ import annotations
 
-from .model import Level, Region, choice, dynamic, explain, predict, static
+from .model import Level, Region, dynamic, explain, predict, static
 
 L1 = Level(
     id="r6l1", region="r6", number="6.1", title="La machine dans la machine",
@@ -60,10 +60,7 @@ print(bolt._battery.get_charge(), spark._battery.get_charge())
         "Chaque robot a sa batterie satellite : elles évoluent indépendamment.",
         "La ligne 24 lit `_battery` depuis l'extérieur : ce sera à corriger dans ta mission avec un getter.",
     ],
-    experiments=[
-        "Ajoute `print(Robot.Battery.__qualname__)`.",
-        "Crée une batterie seule : `spare = Robot.Battery()`. Est-ce possible ?",
-    ],
+    experiments=[],
     mission_title="Le carnet des tourelles",
     mission="""Crée une classe `Turret(name: str, ammo: int)` qui contient une classe imbriquée `Logbook` :
 
@@ -220,7 +217,7 @@ print(type(Drill()._meter).__qualname__)
         "`self.Meter()` trouve le compteur de la classe réelle de l'objet.",
         "Le diagramme montre Drill.Meter qui hérite de Machine.Meter.",
     ],
-    experiments=["Remplace `self.Meter()` par `Machine.Meter()`. Quel compteur obtient la perceuse ?"],
+    experiments=[],
     mission_title="La tourelle de givre",
     mission="""Garde ta classe `Turret` du niveau précédent (le bouton « Reprendre mon code » la recopie) et ajoute `FrostTurret(Turret)` :
 
@@ -339,7 +336,7 @@ for creature in [Cat(), Ocelot()]:
         "La même fonction `listen` exécute deux méthodes différentes.",
         "Regarde dans le journal quelle classe a fourni `sound()` à chaque appel.",
     ],
-    experiments=["Ajoute une classe `Lynx(Cat)` avec son propre son. As-tu besoin de modifier `listen` ?"],
+    experiments=[],
     mission_title="L'avant-poste",
     mission="""Garde tes classes `Turret` et `FrostTurret` et ajoute :
 

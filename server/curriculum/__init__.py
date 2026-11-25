@@ -2,13 +2,16 @@
 from __future__ import annotations
 
 from .model import Level, Region
+from .experiments import EXPERIMENTS
 from .scenes import SCENES
 from . import (r0_prairie, r1_village, r2_atelier, r3_citadelle, r4_forge,
                r5_labo, r6_tour, r7_royaume, r8_faille, r9_biblio)
 
 ACTS: dict[int, dict[str, str]] = {
-    1: {"name": "Acte I — Les Fondations", "subject": "python00 · Growing Code",
-        "summary": "Fonctions, entrées, calculs, conditions, boucles, récursion"},
+    1: {"name": "Acte I — Les Fondations",
+        "subject": "python00 · Growing Code",
+        "summary": "Fonctions, entrées, calculs, conditions, boucles, "
+                   "récursion"},
     2: {"name": "Acte II — L'Ère des Créateurs",
         "subject": "python01 · Code Cultivation",
         "summary": "Programmation orientée objet"},
@@ -42,6 +45,10 @@ ORDER: list[str] = [level.id for region in REGIONS for level in region.levels]
 # The story scene of each level (characters, scenery, dialogues).
 for _level_id, _scene in SCENES.items():
     LEVELS[_level_id].scene = _scene
+
+# The guided experiments of each level (see experiments.py).
+for _level_id, _experiments in EXPERIMENTS.items():
+    LEVELS[_level_id].experiments = _experiments
 
 NOTIONS: dict[str, str] = {
     "A1": "Exécution séquentielle", "A2": "Point d'entrée",
@@ -85,7 +92,8 @@ NOTIONS: dict[str, str] = {
     "H3": "input()", "H4": "int() et types str / int",
     "H5": "Opérateurs + - * / // %", "H6": "if / elif / else",
     "H7": "Comparaisons et valeurs limites", "H8": "Boucle for / range()",
-    "H9": "Boucle while", "H10": "Accumulateur", "H11": "Récursion et cas de base",
+    "H9": "Boucle while", "H10": "Accumulateur",
+    "H11": "Récursion et cas de base",
     "H12": "Itératif vs récursif", "H13": "Fonction auxiliaire / défaut",
     "H14": "return vs print", "H15": "Méthodes de chaînes",
     "H16": "Annotations obligatoires", "H17": "Style flake8",

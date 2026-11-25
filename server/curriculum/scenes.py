@@ -16,6 +16,13 @@ brings them to life:
 
 Positions ``at`` are ``[ds, dd]`` offsets on the stage: ``ds`` goes towards
 the player, ``dd`` towards the right edge of the map.
+
+What the program does changes the scene (``react``): a rule pairs an event
+of the program (a printed line, a call, a new object…) with consequences
+in the world (night falls, a lantern lights up, a door opens…). See
+``web/js/reactions.js`` for the patterns and the actions. ``start`` on a
+prop gives its state before the program runs (``start={"on": False}``: the
+lantern is out).
 """
 from __future__ import annotations
 
@@ -33,6 +40,11 @@ def npc(id_: str, name: str, skin: str, at: tuple[float, float],
 def prop(type_: str, at: tuple[float, float], label: str = "",
          **opts: Any) -> dict[str, Any]:
     return {"type": type_, "at": list(at), "label": label, **opts}
+
+
+def react(on: dict[str, Any], *actions: list[Any]) -> dict[str, Any]:
+    """When the program does ``on``, the world does ``actions``."""
+    return {"on": on, "do": [list(a) for a in actions]}
 
 
 def scene(npcs: list[dict[str, Any]], props: list[dict[str, Any]],
@@ -65,7 +77,8 @@ SCENES: dict[str, dict[str, Any]] = {
     # ------------------------------------------------------------ Act I
     "a1l1": scene(
         [npc("ancien", "Le vieux villageois", "elder", FRONT)],
-        [prop("house", BACK, "le village"), prop("lantern", SMALL2, "la lanterne"),
+        [prop("house", BACK, "le village"),
+         prop("lantern", SMALL2, "la lanterne", start={"on": False}),
          prop("flowers", SIDE), prop("board", RIGHT, "les recettes")],
         [("ancien", "Bienvenue, voyageur ! Tu es dans la Prairie des Premiers Pas."),
          ("ancien", "Ici, on écrit des recettes : on les range, puis on les suit quand on en a besoin."),
@@ -483,3 +496,243 @@ SCENES: dict[str, dict[str, Any]] = {
 }
 # The last level has its own cinematic (see web/js/finale.js).
 SCENES["k3l1"]["cinematic"] = "finale"
+<<<<<<< HEAD
+=======
+
+# What the programs of a level do to its world. The patterns use what the
+# demonstration and the mission (its locked tester, the names it imposes)
+# really do, so that the player's own code changes the scene too.
+RED = "#e5534b"
+RULES: dict[str, list[dict[str, Any]]] = {
+    "a1l1": [
+        # The demo: the bell rings at each call.
+        react({"call": "sonner_cloche"}, ["sound", "bell"],
+              ["pulse", "house"], ["pose", "ancien", "cheer"]),
+        # The mission: the night falls, then each call of the function
+        # lights the lantern (a second call rekindles it: it never goes
+        # out by itself), the light drives the zombie away.
+        react({"print": "nuit tombe"}, ["night", True],
+              ["mob", "Zombie", [-0.6, 4.6]],
+              ["say", "ancien", "La nuit tombe… vite, la lanterne !"]),
+        react({"call": "allumer_lanterne"}, ["light", "lantern", True],
+              ["flee"], ["pose", "ancien", "cheer"]),
+        react({"print": "rentrent chez eux"},
+              ["light", "house", True], ["open", "house", True]),
+    ],
+    "r1l1": [
+        react({"print": "Bienvenue"}, ["pulse", "board"],
+              ["pose", "chef", "cheer"]),
+        react({"print": "Marché ouvert"}, ["pulse", "crates"],
+              ["sound", "bell"]),
+        react({"var": "forge_name"}, ["pulse", "board"]),
+        react({"var": "iron_ingots"}, ["pulse", "crates"]),
+        react({"var": "coal_needed"}, ["pulse", "furnace"]),
+        react({"var": "is_open", "value": "True"},
+              ["light", "furnace", True], ["pose", "forgeron", "cheer"]),
+        react({"var": "is_open", "value": "False"},
+              ["light", "furnace", False]),
+    ],
+    "a1l3": [
+        react({"input": True}, ["pose", "villageois", "talk"]),
+        react({"call": "commande_torches"}, ["light", "torch", True]),
+        react({"returns": "commande_torches"}, ["light", "house", True],
+              ["pose", "villageois", "cheer"]),
+    ],
+    "a1l4": [
+        # The demo: the light level decides the time of day.
+        react({"print": "monstres peuvent"}, ["night", True],
+              ["mob", "Zombie", [0.4, 3.0]]),
+        react({"print": "Zone sûre"}, ["night", True],
+              ["light", "torch", True], ["flee"]),
+        react({"print": "Plein jour"}, ["night", False], ["flee"]),
+        # The mission: the guard lets the traveller cross… or not.
+        react({"print": "Passe,"}, ["pulse", "bridge"],
+              ["pose", "garde", "cheer"], ["pose", "voyageur", "cheer"]),
+        react({"print": "Reviens quand"}, ["pose", "voyageur", "sad"]),
+        react({"print": "Prends une torche"}, ["light", "torch", True]),
+    ],
+    "a2l1": [
+        # Each floor printed by the program is a floor of the tower.
+        react({"print": "Étage"}, ["grow", "blocktower"]),
+        react({"print": "Total"}, ["pulse", "blocktower"],
+              ["pose", "mineur", "cheer"]),
+        react({"print": "Somme des étages"}, ["pose", "mineur", "cheer"]),
+        react({"print": "Étages construits"}, ["pulse", "blocktower"]),
+    ],
+    "a2l2": [
+        # Each call of the recursive echo: the cave answers.
+        react({"call": "echo"}, ["pulse", "cave"], ["sound", "blip"]),
+        react({"call": "signal_recursif"}, ["pulse", "redstone"],
+              ["sound", "blip"]),
+        react({"call": "signal_iteratif"}, ["pulse", "redstone"]),
+        react({"returns": "signal_recursif"},
+              ["light", "redstone", True]),
+        react({"returns": "signal_iteratif"},
+              ["light", "redstone", True]),
+        react({"print": "Pyramide"}, ["pulse", "rocks"]),
+    ],
+    "a2l3": [
+        react({"call": "presenter"}, ["pulse", "board"],
+              ["pose", "scribe", "talk"]),
+        react({"call": "formater_pseudo"}, ["pulse", "board"]),
+        react({"call": "afficher_badge"}, ["pulse", "gate"],
+              ["sound", "page"]),
+    ],
+    "r1l2": [
+        react({"print": "__name__"}, ["pulse", "gate"]),
+        react({"call": "main"}, ["open", "gate", True],
+              ["pose", "batisseur", "cheer"]),
+    ],
+    "r2l3": [
+        # Smelting lights the furnaces.
+        react({"call": "smelt"}, ["light", "furnace", True]),
+        react({"call": "move"}, ["pulse", "crates"]),
+        react({"print": "panne"}, ["burst", "crates", "#8a8a8a"]),
+    ],
+    "r3l2": [
+        react({"spawn": "Beacon"}, ["light", "beacon", True]),
+        react({"call": "set_power"}, ["pulse", "beacon"]),
+        react({"call": "set_speed"}, ["pulse", "gate"]),
+        # A refused value: a red flash.
+        react({"print": "refus"}, ["burst", "beacon", RED],
+              ["pose", "seigneur", "talk"]),
+    ],
+    "r5l1": [
+        react({"call": "light"}, ["light", "redstone", True],
+              ["burst", "crystal", "#b48cf2"]),
+        react({"call": "output"}, ["pulse", "redstone"]),
+    ],
+    "x1l1": [
+        react({"print": "illisible"}, ["burst", "sensor", RED]),
+        react({"print": "rejetée"}, ["burst", "sensor", RED]),
+        react({"print": "n'a pas planté"}, ["light", "sensor", True],
+              ["pose", "ingenieure", "cheer"]),
+        react({"print": "fonctionne toujours"},
+              ["light", "sensor", True], ["pose", "ingenieure", "cheer"]),
+    ],
+    "x1l5": [
+        react({"print": "Ouverture du portail"},
+              ["light", "portal", True]),
+        react({"print": "traverse le portail"}, ["pulse", "portal"]),
+        react({"print": "Alerte"}, ["burst", "portal", RED],
+              ["pose", "gardien", "talk"]),
+        react({"print": "Fermeture du portail"},
+              ["light", "portal", False], ["sound", "door"]),
+        react({"print": "finally pour"}, ["light", "torch", True]),
+    ],
+    "k2l1": [
+        # Each value produced by a generator: the Source pulses. Each wave
+        # printed: its creatures come out.
+        react({"yield": True}, ["pulse", "spawner"], ["sound", "spawn"]),
+        react({"print": "zombie"}, ["mob", "Zombie", [0.6, -1.0]]),
+        react({"print": "araignée"}, ["mob", "Spider", [0.6, -1.0]]),
+        react({"print": "creeper"}, ["mob", "Creeper", [0.6, -1.0]]),
+        react({"print": "Au tour de"}, ["pulse", "fountain"]),
+    ],
+    # ------------------------------------------- Acts III to V (objects)
+    # A new object comes out of the workshop of the level; its methods
+    # make the scenery work.
+    "r1l3": [
+        react({"call": "announce"}, ["pulse", "board"]),
+        react({"call": "main"}, ["pulse", "workbench"],
+              ["pose", "batisseur", "cheer"]),
+    ],
+    "r2l1": [
+        react({"spawn": "*"}, ["pulse", "workbench"],
+              ["burst", "crystal", "#b8f36b"]),
+    ],
+    "r2l2": [
+        react({"spawn": "*"}, ["pulse", "workbench"]),
+        react({"call": "attack"}, ["pulse", "dummy"], ["sound", "clang"]),
+        react({"call": "introduce"}, ["pose", "artisan", "talk"]),
+    ],
+    "r2l4": [
+        react({"spawn": "*"}, ["pulse", "workbench"]),
+        react({"call": "describe"}, ["pulse", "toolrack"]),
+    ],
+    "r2l5": [
+        react({"spawn": "*"}, ["open", "chest", True]),
+        react({"call": "put"}, ["pulse", "chest"], ["pulse", "crates"]),
+    ],
+    "r3l1": [
+        react({"spawn": "*"}, ["pulse", "gate"]),
+        react({"call": "take_hit"}, ["pulse", "gate"], ["sound", "clang"]),
+    ],
+    "r3l3": [
+        react({"spawn": "*"}, ["pulse", "gate"]),
+        react({"call": "try_open"}, ["pulse", "chest"], ["sound", "door"]),
+    ],
+    "r4l1": [
+        react({"spawn": "*"}, ["pulse", "forge"], ["sound", "clang"]),
+        react({"call": "howl"}, ["sound", "creature"]),
+    ],
+    "r4l2": [
+        react({"spawn": "*"}, ["pulse", "forge"], ["pulse", "minecart"]),
+    ],
+    "r4l3": [
+        react({"spawn": "*"}, ["pulse", "anvil"], ["sound", "clang"]),
+        react({"call": "describe"}, ["pulse", "toolrack"]),
+    ],
+    "r4l4": [
+        react({"spawn": "*"}, ["pulse", "forge"]),
+        react({"call": "upgrade"}, ["pulse", "anvil"], ["sound", "clang"]),
+    ],
+    "r5l2": [
+        react({"spawn": "*"}, ["burst", "cauldron", "#b48cf2"]),
+        react({"call": "water"}, ["pulse", "potions"]),
+    ],
+    "r5l3": [
+        react({"spawn": "*"}, ["burst", "cauldron", "#5ee6e0"]),
+    ],
+    "r6l1": [
+        react({"spawn": "*"}, ["pulse", "turret"]),
+        react({"call": "drain"}, ["pulse", "turret"], ["sound", "zap"]),
+    ],
+    "r6l2": [
+        react({"spawn": "*"}, ["pulse", "turret"],
+              ["burst", "crystal", "#9fdcff"]),
+    ],
+    "r6l3": [
+        react({"spawn": "*"}, ["pulse", "turret"]),
+        react({"call": "sound"}, ["pulse", "tent"]),
+    ],
+    "r6l4": [
+        react({"call": "strike"}, ["pulse", "dummy"], ["sound", "clang"]),
+        react({"call": "take_damage"}, ["burst", "banner", RED]),
+    ],
+    # ------------------------------------------- Act X (errors)
+    # A raised exception: a red flash on the machine; caught: it holds.
+    "x1l2": [
+        react({"raise": True}, ["burst", "stacks", RED]),
+        react({"caught": True}, ["pulse", "board"]),
+        react({"call": "regler"}, ["pulse", "chest"]),
+    ],
+    "x1l3": [
+        react({"raise": True}, ["burst", "levers", RED], ["sound", "zap"]),
+        react({"caught": True}, ["pulse", "toolrack"]),
+    ],
+    "x1l4": [
+        react({"spawn": "*"}, ["pulse", "workbench"]),
+        react({"raise": True}, ["burst", "redstone", RED]),
+    ],
+    "x1l6": [
+        react({"raise": True}, ["burst", "storm", RED]),
+        react({"print": ""}, ["pulse", "sensor"]),
+    ],
+    # ------------------------------------------- Acts XI and XII (data)
+    "k1l1": [react({"print": ""}, ["pulse", "chatboard"])],
+    "k1l2": [
+        react({"print": ""}, ["pulse", "podium"]),
+        react({"raise": True}, ["burst", "board", RED]),
+    ],
+    "k1l3": [
+        react({"print": ""}, ["pulse", "maptable"]),
+        react({"raise": True}, ["burst", "portal", RED]),
+    ],
+    "k1l4": [react({"print": ""}, ["pulse", "maptable"])],
+    "k1l5": [react({"print": ""}, ["pulse", "lectern"])],
+    "k2l2": [react({"print": ""}, ["burst", "cauldron", "#5ee6e0"])],
+}
+for _level, _rules in RULES.items():
+    SCENES[_level]["react"] = _rules
+>>>>>>> c46f881 (lastfeatures)

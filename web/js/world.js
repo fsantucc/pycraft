@@ -99,6 +99,14 @@ export class World {
     this.time = 0;
     this.paused = false;
     this.later = [];
+<<<<<<< HEAD
+=======
+    // Night falling on the world (a program can make it happen): 0 day, 1 night.
+    this.night = { from: 0, to: 0, t0: 0, dur: 1 };
+    // Smooth camera moves asked by the player (zoom, recentre, focus).
+    this.panTo = null;
+    this.zoomTo = null;
+>>>>>>> c46f881 (lastfeatures)
     this.particles = new Particles(() => this.time);
     this.shake = { until: 0, amp: 0 };
     this.flash = { until: 0, color: "#fff", t0: 0 };
@@ -277,6 +285,7 @@ export class World {
         const dx = e.clientX - drag.x;
         const dy = e.clientY - drag.y;
         if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+        this.panTo = null;
         this.pan.x = drag.px + dx;
         this.pan.y = drag.py + dy;
       } else if (e.target === this.canvas) {
@@ -287,7 +296,8 @@ export class World {
     this.canvas.addEventListener("mouseleave", () => this.onHover(null));
     this.canvas.addEventListener("wheel", (e) => {
       e.preventDefault();
-      this.zoom = Math.max(0.5, Math.min(2.6, this.zoom * (e.deltaY < 0 ? 1.1 : 0.9)));
+      const r = this.canvas.getBoundingClientRect();
+      this.zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, e.clientX - r.left, e.clientY - r.top);
     }, { passive: false });
   }
 
@@ -550,13 +560,25 @@ export class World {
     });
     const props = (scene.props || []).map((p, i) => {
       const [x, y] = stageSD(p.at);
-      return { ...p, x, y, w: 2, d: 2, h: 2.4, seed: i * 3.1 };
+      return { ...p, x, y, w: 2, d: 2, h: 2.4, seed: i * 3.1, code: {}, click: {} };
     });
     this.stage = { ...scene, npcs, props, done };
+    // A new scene starts in daylight, without the creatures of the last one.
+    this.setNight(false, false);
+    this.mobs = this.mobs.filter((m) => !m.react);
   }
 
   setStageDone(done) {
     if (this.stage) this.stage.done = done;
+  }
+
+  skinIcon(skin) {
+    return (SKINS[skin] || {}).icon || "🧑";
+  }
+
+  bossCenter() {
+    const [bx, by] = SD(14, 11.5);
+    return [bx + 0.5, by + 0.5];
   }
 
   stageNpc(id) {
@@ -592,6 +614,11 @@ export class World {
       const life = dur || Math.min(9000, 2400 + String(text).length * 45);
       this.npcPose(n.id, "talk", Math.min(life, 2200));
       sound.voice(String(text), voiceOf(n), { pan: this.panAt(this.npcTop(n.id)) });
+<<<<<<< HEAD
+=======
+      // One bubble per character: a new line replaces the previous one.
+      this.effects = this.effects.filter((f) => !(f.kind === "bubble" && f.owner === `npc:${n.id}`));
+>>>>>>> c46f881 (lastfeatures)
       this.addEffect({ kind: "bubble", at: this.npcTop(n.id), text: answer ? `🗣 ${text}` : String(text), dur: life, owner: `npc:${n.id}`, npc: true });
     };
     if (delay) this.introTimers.push(setTimeout(go, delay)); else go();
@@ -623,6 +650,124 @@ export class World {
   // A camera move during a cinematic: from one point of view to another,
   // over `dur` ms of world time. at = [x, y, z] in the world; zoom = 1 shows
   // the whole map. cut: jump there at once (a new scene).
+<<<<<<< HEAD
+=======
+  // ------------------------------------------------ camera of the player
+  // The playable map never leaves the screen: at least a good part of it
+  // stays visible whatever the drag, the zoom or the size of the window.
+  keepMapInView() {
+    const pts = [[0, 0], [W, 0], [0, D], [W, D]].map(([x, y]) => this.project(x, y, 0));
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    // At least this much of the map stays on screen, horizontally and
+    // vertically.
+    const mx = Math.min(160, this.width * 0.25);
+    const my = Math.min(140, this.height * 0.25);
+    let dx = 0;
+    let dy = 0;
+    if (maxX < mx) dx = mx - maxX; else if (minX > this.width - mx) dx = this.width - mx - minX;
+    if (maxY < my) dy = my - maxY; else if (minY > this.height - my) dy = this.height - my - minY;
+    if (dx || dy) {
+      this.pan.x += dx;
+      this.pan.y += dy;
+      if (this.panTo) this.panTo = { x: this.panTo.x + dx, y: this.panTo.y + dy };
+    }
+  }
+
+  // Zoom keeping the point under the mouse where it is (like a map).
+  zoomAt(factor, sx = this.width / 2, sy = this.height / 2) {
+    const from = this.zoomTo || this.zoom;
+    const to = Math.max(0.5, Math.min(2.6, from * factor));
+    const r = to / this.zoom;
+    const base = this.panTo || this.pan;
+    this.panTo = {
+      x: (sx - this.width / 2) - (sx - this.width / 2 - base.x) * r,
+      y: (sy - this.height / 2) - (sy - this.height / 2 - base.y) * r,
+    };
+    this.zoomTo = to;
+  }
+
+  recenter() {
+    this.panTo = { x: 0, y: 0 };
+    this.zoomTo = 1;
+  }
+
+  // The camera goes to someone (a click on a character or a creature) and
+  // comes back where it was when the card is closed.
+  focusOn(at, zoom = 2.3) {
+    if (this.cinematic) return;
+    if (!this.focusSaved) this.focusSaved = { pan: { ...(this.panTo || this.pan) }, zoom: this.zoomTo || this.zoom };
+    this.panTo = { x: 0, y: 0 };
+    this.zoomTo = 1;
+    // The card sits at the bottom right: the subject goes up and left.
+    const shift = this.width > 700 ? [-0.14, -0.08] : [0, -0.18];
+    this.shot({ at, zoom, shift }, null, 10, { cut: false });
+  }
+
+  endFocus() {
+    if (this.camShot && !this.cinematic) this.camShot = null;
+    if (this.focusSaved) {
+      this.panTo = this.focusSaved.pan;
+      this.zoomTo = this.focusSaved.zoom;
+      this.focusSaved = null;
+    }
+  }
+
+  // A program printed 42: the sky answers, for a moment.
+  answer42() {
+    const at = () => [this.width / 2, this.height * 0.3];
+    this.particles.burst(at, { count: 42, colors: ["#b48cf2", "#5ee6e0", "#ffffff", "#f2c14e"], speed: 160, up: 60, gravity: 40, size: 4, glow: true, life: 1600 });
+    this.addEffect({ kind: "float", at, text: "42 — la réponse à la grande question", color: "#d7c0ff", dur: 2600 });
+    sound.play("twinkle");
+  }
+
+  // ------------------------------------------------------------- night
+  setNight(on, animate = true) {
+    const to = on ? 1 : 0;
+    if (this.night.to === to) return;
+    const from = animate ? this.nightLevel() : to;
+    this.night = { from, to, t0: this.now(), dur: animate ? 2600 : 1 };
+  }
+
+  nightLevel() {
+    const n = this.night;
+    const t = Math.max(0, Math.min(1, (this.now() - n.t0) / n.dur));
+    const e = t * t * (3 - 2 * t);
+    return n.from + (n.to - n.from) * e;
+  }
+
+  // Darkness over the world (the lights of the scene shine through it,
+  // they are drawn after), fireflies near the ground.
+  drawNight(now) {
+    const n = this.nightLevel();
+    if (n <= 0.001) return;
+    const c = this.ctx;
+    c.save();
+    c.fillStyle = `rgba(10,14,46,${(0.5 * n).toFixed(3)})`;
+    c.fillRect(0, 0, this.width, this.height);
+    c.globalCompositeOperation = "lighter";
+    const k = this.cam.k * this.zoom;
+    for (let i = 0; i < 16; i += 1) {
+      const x = (hash(i, 31) * W + Math.sin(now / 1900 + i) * 0.8);
+      const y = (hash(i, 32) * D + Math.cos(now / 2300 + i * 1.7) * 0.8);
+      const z = 0.4 + Math.abs(Math.sin(now / 1400 + i)) * 1.2;
+      const [px, py] = this.project(x, y, z);
+      const blink = Math.max(0, Math.sin(now / 420 + i * 2.1));
+      const r = (2.2 + 2 * blink) * Math.max(0.6, k);
+      const g = c.createRadialGradient(px, py, 0, px, py, r * 3);
+      g.addColorStop(0, `rgba(214,255,140,${(0.8 * n * blink).toFixed(3)})`);
+      g.addColorStop(1, "rgba(214,255,140,0)");
+      c.fillStyle = g;
+      c.fillRect(px - r * 3, py - r * 3, r * 6, r * 6);
+    }
+    c.restore();
+  }
+
+>>>>>>> c46f881 (lastfeatures)
   shot(from, to = null, dur = 1000, { cut = true, ease = true } = {}) {
     this.camShot = { from, to: to || from, dur, t0: this.now(), ease };
     if (cut) this.snapCam = true;
@@ -637,7 +782,15 @@ export class World {
     const zoom = mix(s.from.zoom, s.to.zoom);
     const [u, v] = this.unit(at[0], at[1], at[2]);
     const fit = Math.min(this.width / 860, this.height / 560);
+<<<<<<< HEAD
     return { k: fit * zoom, u, v, speed: 6 };
+=======
+    const k = fit * zoom;
+    // shift: where the subject sits on screen (fractions of the view from
+    // the centre), e.g. to leave room for a card.
+    const [fx, fy] = s.from.shift || [0, 0];
+    return { k, u: u - (fx * this.width) / k, v: v - (fy * this.height) / k, speed: 6 };
+>>>>>>> c46f881 (lastfeatures)
   }
 
   // A slow dolly towards the scene (the camera starts a little further away
@@ -924,20 +1077,33 @@ export class World {
   collectStage(list, now) {
     const st = this.stage;
     if (!st) return;
-    for (const prop of st.props) {
-      const { parts, lights } = propParts(prop.type, { done: prop.invert ? !st.done : st.done, t: now, n: prop.n, color: prop.color });
+    for (const [index, prop] of st.props.entries()) {
+      const look = this.propLook(prop);
+      const { parts, lights } = propParts(prop.type, { done: look.on, lit: look.lit, open: look.open, floors: look.count, t: now, n: prop.n, color: prop.color, since: now - (prop.litAt ?? -1e9) });
       prop.lights = lights;
+      prop.index = index;
       prop.top = Math.max(0.5, ...parts.map((p) => p.z + p.h));
       const cx = parts.length ? Math.max(...parts.map((p) => p.x + p.w)) / 2 : 0.5;
       const cy = parts.length ? Math.max(...parts.map((p) => p.y + p.d)) / 2 : 0.5;
       prop.cx = cx;
       prop.cy = cy;
+      // A little jump when the prop reacts (a click, the program).
+      const bump = prop.pulseAt && now - prop.pulseAt < 400 ? Math.sin(((now - prop.pulseAt) / 400) * Math.PI) * 0.12 : 0;
       list.push({ d: this.depthOf(prop.x + cx, prop.y + cy, 0), fn: () => {
         this.drawModel(parts,
+<<<<<<< HEAD
           (p) => ({ x: prop.x + p.x, y: prop.y + p.y, z: p.z, w: p.w, d: p.d, h: p.h }),
           (p, pi) => ({ color: p.c, outline: p.role === "flame" ? null : "rgba(0,0,0,0.25)",
             tex: p.w * p.h > 0.3 && p.role !== "flame" ? 2 : 0, seed: prop.seed + pi * 2.3 }));
+=======
+          (p) => ({ x: prop.x + p.x, y: prop.y + p.y, z: p.z + bump, w: p.w, d: p.d, h: p.h }),
+          (p, pi) => ({ color: p.c, outline: p.role === "flame" ? null : "rgba(0,0,0,0.25)",
+            tex: p.w * p.h > 0.3 && p.role !== "flame" ? 2 : 0, seed: prop.seed + pi * 2.3 }), { solid: true });
+>>>>>>> c46f881 (lastfeatures)
       } });
+      // Clickable: the screen box of the model.
+      const box = this.screenBox(prop.x, prop.y, parts);
+      this.hitboxes.push({ ...box, target: { kind: "prop", id: index } });
     }
     for (const n of st.npcs) {
       if (n.poseUntil && now > n.poseUntil) {
@@ -959,6 +1125,151 @@ export class World {
     }
   }
 
+  // What a prop shows now: the mission result (done), what the program
+  // did to it (code), what the player did with a click (open a chest…).
+  propLook(prop) {
+    const st = this.stage;
+    const done = st ? (prop.invert ? !st.done : st.done) : false;
+    const code = prop.code || {};
+    const start = prop.start || {};
+    const click = prop.click || {};
+    return {
+      on: code.on ?? done,
+      // Lamps lit from the start unless the scene says otherwise; once the
+      // mission is done, they shine.
+      lit: code.on ?? (done ? true : start.on),
+      open: click.open ?? code.open ?? start.open,
+      count: code.count,
+    };
+  }
+
+  propTop(prop) {
+    return () => this.project(prop.x + (prop.cx || 0.5), prop.y + (prop.cy || 0.5), (prop.top || 1) * 0.85);
+  }
+
+  // ----------------------------------------------- code → world reactions
+  // `result`: { state, news } from reactions.js. The state is the world as
+  // the program left it at this step; the news, what this step changed
+  // (animated only when the step is played forward).
+  applyReactions(result, animate) {
+    const { state, news } = result;
+    const st = this.stage;
+    this.setNight(state.night, animate);
+    if (st) for (const p of st.props) p.code = { ...(state.props[p.type] || {}) };
+    // The creatures brought by the program.
+    const want = new Map(state.mobs.map((m) => [m.id, m]));
+    const fleeing = new Set();
+    for (const n of animate ? news : []) if (n.kind === "flee") n.ids.forEach((id) => fleeing.add(id));
+    this.mobs = this.mobs.filter((m) => {
+      if (!m.react) return true;
+      if (want.has(m.id)) return !m.fleeing && !m.dying;
+      if (fleeing.has(m.id) && !m.dying) {
+        m.fleeing = this.now();
+        this.later.push({ at: this.now() + 650, fn: () => { if (m.fleeing && this.mobs.includes(m)) this.killMob(m.id); } });
+        return true;
+      }
+      return !!m.fleeing;
+    });
+    for (const m of state.mobs) {
+      if (this.mobs.some((x) => x.id === m.id)) continue;
+      const [x, y] = stageSD(m.at);
+      this.mobs.push({ id: m.id, model: m.model, x, y, scale: 1, born: this.now(), hurt: 0, dying: 0, react: true });
+    }
+    if (!animate || !st) return;
+    const now = this.now();
+    const props = (target) => st.props.filter((p) => p.type === target);
+    for (const n of news) {
+      switch (n.kind) {
+        case "nightfall":
+          sound.play("whoosh", { gain: 0.6 });
+          sound.play("chime", { gain: 0.25 });
+          break;
+        case "daybreak":
+          sound.play("chime", { gain: 0.5 });
+          break;
+        case "ignite":
+          for (const p of props(n.target)) {
+            p.litAt = now;
+            p.pulseAt = now;
+            this.particles.burst(this.propTop(p), { count: 22, colors: ["#ffd27a", "#fff3c0", "#ff9a3a"], speed: 60, up: 70, gravity: -30, size: 3, glow: true });
+          }
+          sound.play("ignite");
+          break;
+        case "relight":
+          for (const p of props(n.target)) {
+            p.pulseAt = now;
+            this.particles.burst(this.propTop(p), { count: 10, colors: ["#ffd27a", "#fff3c0"], speed: 40, up: 50, gravity: -30, size: 3, glow: true });
+          }
+          sound.play("twinkle", { gain: 0.5 });
+          break;
+        case "extinguish":
+          for (const p of props(n.target)) {
+            p.pulseAt = now;
+            this.particles.burst(this.propTop(p), { count: 14, colors: ["#8a8a8a", "#bdbdbd"], speed: 30, up: 40, gravity: -40, size: 5, life: 1100 });
+          }
+          sound.play("whoosh", { gain: 0.4 });
+          break;
+        case "opened":
+        case "closed":
+          for (const p of props(n.target)) p.pulseAt = now;
+          sound.play("door");
+          break;
+        case "grew":
+          for (const p of props(n.target)) {
+            p.pulseAt = now;
+            this.particles.burst(this.propTop(p), { count: 10, colors: ["#e8d6a0", "#ffffff"], speed: 50, up: 40, gravity: 120, size: 3 });
+          }
+          sound.play("build", { gain: 0.6 });
+          break;
+        case "mob":
+          sound.play("creature", { pitch: 150 });
+          break;
+        case "pulse":
+          for (const p of props(n.args[0])) {
+            p.pulseAt = now;
+            this.particles.burst(this.propTop(p), { count: 12, colors: ["#fff3c0", "#f2c14e"], speed: 50, up: 50, gravity: -10, size: 3, glow: true });
+          }
+          break;
+        case "burst":
+          for (const p of props(n.args[0])) this.particles.burst(this.propTop(p), { count: 26, colors: [n.args[1] || "#f2c14e", "#ffffff"], speed: 80, up: 70, gravity: 80, size: 4, glow: true });
+          break;
+        case "say":
+          this.npcSay(n.args[0], n.args[1]);
+          break;
+        case "pose":
+          this.npcPose(n.args[0], n.args[1], 1800);
+          break;
+        case "sound":
+          sound.play(n.args[0]);
+          break;
+        default:
+          break;
+      }
+    }
+  }
+
+  // Screen rectangle of a model (for clicks), from its parts.
+  screenBox(ox, oy, parts) {
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let y0 = Infinity;
+    let y1 = -Infinity;
+    for (const p of parts) {
+      for (const [x, y, z] of [[p.x, p.y, p.z], [p.x + p.w, p.y + p.d, p.z], [p.x + p.w, p.y, p.z + p.h], [p.x, p.y + p.d, p.z + p.h], [p.x + p.w, p.y + p.d, p.z + p.h], [p.x, p.y, p.z + p.h]]) {
+        const [sx, sy] = this.project(ox + x, oy + y, z);
+        x0 = Math.min(x0, sx);
+        x1 = Math.max(x1, sx);
+        y0 = Math.min(y0, sy);
+        y1 = Math.max(y1, sy);
+      }
+    }
+    if (!Number.isFinite(x0)) {
+      const [sx, sy] = this.project(ox + 0.5, oy + 0.5, 0);
+      return { x0: sx - 10, x1: sx + 10, y0: sy - 20, y1: sy + 4 };
+    }
+    return { x0, x1, y0, y1 };
+  }
+
   // Warm halos and sparks around torches, fires, portals…
   drawStageLights(now) {
     const st = this.stage;
@@ -967,7 +1278,11 @@ export class World {
     const k = this.cam.k * this.zoom;
     c.save();
     c.globalCompositeOperation = "lighter";
+<<<<<<< HEAD
     const glow = this.theme.night ? ["88", "3a"] : ["50", "1e"];
+=======
+    const glow = this.theme.night || this.nightLevel() > 0.5 ? ["88", "3a"] : ["50", "1e"];
+>>>>>>> c46f881 (lastfeatures)
     for (const item of [...st.props, ...st.npcs]) {
       for (const [lx, ly, lz, color] of item.lights || []) {
         const [x, y] = this.project(item.x + lx, item.y + ly, lz);
@@ -991,15 +1306,23 @@ export class World {
   drawStageLabels() {
     const st = this.stage;
     if (!st) return;
+    const sel = this.selected || {};
     for (const n of st.npcs) {
       const [x, y] = this.project(n.x + 0.5, n.y + 0.5, 0);
       const skin = SKINS[n.skin] || {};
-      this.tag(x, y + 26, n.name, "#eaffd8", 10, "rgba(20,40,14,0.9)", { icon: skin.icon || "🧑", border: "#6aa84f" });
+      const on = sel.kind === "npc" && sel.id === n.id;
+      this.tag(x, y + 26, n.name, on ? "#2b1d0e" : "#eaffd8", 10, on ? "rgba(242,193,78,0.95)" : "rgba(20,40,14,0.9)", { icon: skin.icon || "🧑", border: on ? "#fff3c0" : "#6aa84f" });
+      // The name is clickable too: same as a click on the character.
+      const r = this.lastTag;
+      if (r) this.hitboxes.push({ x0: r.x, x1: r.x + r.w, y0: r.y, y1: r.y + r.h, target: { kind: "npc", id: n.id } });
     }
-    for (const p of st.props) {
+    for (const [i, p] of st.props.entries()) {
       if (!p.label) continue;
       const [x, y] = this.project(p.x + (p.cx || 0.5), p.y + (p.cy || 0.5), (p.top || 1) + 0.25);
-      this.tag(x, y, p.label, "#f5ecd7", 9, "rgba(40,30,20,0.75)", {});
+      const on = sel.kind === "prop" && sel.id === i;
+      this.tag(x, y, p.label, on ? "#2b1d0e" : "#f5ecd7", 9, on ? "rgba(242,193,78,0.95)" : "rgba(40,30,20,0.75)", {});
+      const r = this.lastTag;
+      if (r) this.hitboxes.push({ x0: r.x, x1: r.x + r.w, y0: r.y, y1: r.y + r.h, target: { kind: "prop", id: i } });
     }
   }
 
@@ -1052,13 +1375,23 @@ export class World {
       const k = m.scale * grow * dying;
       if (k <= 0.01) continue;
       const hurt = now - m.hurt < 260;
-      const bob = Math.abs(Math.sin(now / 260 + m.x)) * 0.06;
-      const shake = hurt ? Math.sin(now / 25) * 0.08 : 0;
+      // Idle: a slow breath. Clicked: a hop (a peaceful creature) or a
+      // threatening lunge (a monster).
+      const react = m.reactAt && now - m.reactAt < 520 ? Math.sin(((now - m.reactAt) / 520) * Math.PI) : 0;
+      const bob = Math.abs(Math.sin(now / 260 + m.x)) * 0.06 + react * 0.35;
+      const shake = hurt ? Math.sin(now / 25) * 0.08 : react * 0.12 * Math.sin(now / 40);
+      if (m.fleeing) {
+        // Running away from the light, towards the edge of the map.
+        m.x += this.dt * 3.2;
+        m.y -= this.dt * 1.2;
+      }
       list.push({ d: this.depthOf(m.x + 0.5, m.y + 0.5, 0), fn: () => {
         this.drawModel(parts,
           (p) => ({ x: m.x + shake + p.x * k, y: m.y + p.y * k, z: p.z * k + bob, w: p.w * k, d: p.d * k, h: p.h * k }),
           (p, pi) => ({ color: hurt ? "#ff5040" : p.c, outline: "rgba(0,0,0,0.28)", tex: p.w * p.h > 0.12 ? 2 : 0, seed: pi * 4.1 + m.x }));
       } });
+      const box = this.screenBox(m.x, m.y, parts.map((p) => ({ x: p.x * k, y: p.y * k, z: p.z * k, w: p.w * k, d: p.d * k, h: p.h * k })));
+      this.hitboxes.push({ ...box, target: { kind: "mob", id: m.id } });
     }
   }
 
@@ -1406,6 +1739,26 @@ export class World {
       if (Math.abs(target.u - this.cam.u) < 0.02) this.cam.u = target.u;
       if (Math.abs(target.v - this.cam.v) < 0.02) this.cam.v = target.v;
     }
+<<<<<<< HEAD
+=======
+    if (this.panTo) {
+      const a = Math.min(1, camDt * 7);
+      this.pan.x += (this.panTo.x - this.pan.x) * a;
+      this.pan.y += (this.panTo.y - this.pan.y) * a;
+      if (Math.abs(this.panTo.x - this.pan.x) + Math.abs(this.panTo.y - this.pan.y) < 0.5) {
+        this.pan = { ...this.panTo };
+        this.panTo = null;
+      }
+    }
+    if (this.zoomTo) {
+      this.zoom += (this.zoomTo - this.zoom) * Math.min(1, camDt * 7);
+      if (Math.abs(this.zoomTo - this.zoom) < 0.002) {
+        this.zoom = this.zoomTo;
+        this.zoomTo = null;
+      }
+    }
+    if (this.width > 0 && !this.cinematic && !this.trailerActive) this.keepMapInView();
+>>>>>>> c46f881 (lastfeatures)
     if (this.later.length) {
       const due = this.later.filter((l) => l.at <= now);
       this.later = this.later.filter((l) => l.at > now);
@@ -1509,9 +1862,17 @@ export class World {
   // Draws the boxes of one model (character, prop, boss…) in the right
   // order. place(p) gives the box of a part in the world; style(p) its
   // color, outline, texture and alpha. See depth.js for the ordering.
+<<<<<<< HEAD
   drawModel(parts, place, style) {
     const boxes = parts.map((p, pi) => ({ ...place(p, pi), p, pi }));
     for (const b of orderBoxes(boxes, (x, y) => this.rotate(x, y))) {
+=======
+  // solid: scenery made of solid blocks (see depth.js); characters keep the
+  // order of their model.
+  drawModel(parts, place, style, { solid = false } = {}) {
+    const boxes = parts.map((p, pi) => ({ ...place(p, pi), p, pi }));
+    for (const b of orderBoxes(boxes, (x, y) => this.rotate(x, y), { solid })) {
+>>>>>>> c46f881 (lastfeatures)
       const st = style(b.p, b.pi);
       if (!st) continue;
       this.box(b.x, b.y, b.z, b.w, b.d, b.h, st.color, st.alpha ?? 1, st.outline === undefined ? "rgba(0,0,0,0.26)" : st.outline,
@@ -1621,6 +1982,7 @@ export class World {
     if (this.boss) this.collectBoss(drawables, now);
     drawables.sort((a, b) => a.d - b.d);
     drawables.forEach((d) => d.fn());
+    this.drawNight(now);
     this.drawStageLights(now);
     if (this.theme.coeur) drawCoeurLights(this, now);
 
@@ -1646,6 +2008,38 @@ export class World {
     sky.addColorStop(1, t.sky[1]);
     c.fillStyle = sky;
     c.fillRect(0, 0, this.width, this.height);
+    // The night falls: a deep blue sky, the stars come out one by one.
+    const n = t.night ? 0 : this.nightLevel();
+    if (n > 0.001) {
+      const dusk = c.createLinearGradient(0, 0, 0, this.height);
+      dusk.addColorStop(0, `rgba(8,10,38,${(0.92 * n).toFixed(3)})`);
+      dusk.addColorStop(0.75, `rgba(40,30,80,${(0.8 * n).toFixed(3)})`);
+      dusk.addColorStop(1, `rgba(90,60,90,${(0.6 * n).toFixed(3)})`);
+      c.fillStyle = dusk;
+      c.fillRect(0, 0, this.width, this.height);
+      for (let i = 0; i < 70; i += 1) {
+        const show = Math.max(0, Math.min(1, n * 1.6 - hash(i, 41) * 0.6));
+        if (!show) continue;
+        const tw = 0.4 + 0.6 * Math.abs(Math.sin(now / 900 + i));
+        c.globalAlpha = tw * show;
+        c.fillStyle = i % 9 === 0 ? "#d7c0ff" : "#ffffff";
+        c.fillRect((i * 137.5) % this.width, (i * 53.3) % (this.height * 0.5), i % 7 === 0 ? 3 : 2, i % 7 === 0 ? 3 : 2);
+      }
+      c.globalAlpha = 1;
+      // The moon.
+      const mx = this.width * 0.82;
+      const my = this.height * 0.14;
+      c.globalAlpha = n;
+      c.fillStyle = "#f5f1dc";
+      c.beginPath();
+      c.arc(mx, my, 16, 0, Math.PI * 2);
+      c.fill();
+      c.fillStyle = "rgba(20,22,60,0.9)";
+      c.beginPath();
+      c.arc(mx + 7, my - 4, 14, 0, Math.PI * 2);
+      c.fill();
+      c.globalAlpha = 1;
+    }
     if (t.night) {
       for (let i = 0; i < 90; i += 1) {
         const tw = 0.4 + 0.6 * Math.abs(Math.sin(now / 900 + i));
@@ -1665,7 +2059,10 @@ export class World {
       }
       return;
     }
-    if (t.sun) {
+    // At night the sun sets and the clouds turn grey-blue.
+    c.save();
+    if (t.sun && n < 0.98) {
+      c.globalAlpha = 1 - n;
       const sx = this.width - 90;
       const g = c.createRadialGradient(sx, 70, 10, sx, 70, 110);
       g.addColorStop(0, "rgba(255,250,210,0.9)");
@@ -1675,6 +2072,7 @@ export class World {
       c.fillStyle = "#fff6c8";
       c.fillRect(sx - 18, 52, 36, 36);
     }
+    c.globalAlpha = 1 - 0.65 * n;
     for (const cl of this.clouds) {
       const x = ((cl.x + (now / 1000) * cl.speed) % (this.width + 300)) - 150;
       c.fillStyle = "rgba(255,255,255,0.85)";
@@ -1683,6 +2081,7 @@ export class World {
       c.fillStyle = "rgba(220,230,240,0.8)";
       c.fillRect(x, cl.y + 14, cl.w, 5);
     }
+    c.restore();
   }
 
   // The ground is expensive (thousands of textured cells). It is rendered
@@ -1784,9 +2183,36 @@ export class World {
     }
   }
 
+  // A golden ring on the ground under what the player selected.
+  drawSelectionRing(x, y, r, now) {
+    const c = this.ctx;
+    const k = this.cam.k * this.zoom;
+    const pulse = 1 + 0.12 * Math.sin(now / 180);
+    c.save();
+    c.strokeStyle = "#f2c14e";
+    c.lineWidth = 3;
+    c.shadowColor = "#f2c14e";
+    c.shadowBlur = 12;
+    c.beginPath();
+    c.ellipse(x, y, r * k * pulse, r * 0.5 * k * pulse, 0, 0, Math.PI * 2);
+    c.stroke();
+    c.restore();
+  }
+
   drawShadows(now) {
     const c = this.ctx;
     const k = this.cam.k * this.zoom;
+    const sel = this.selected;
+    if (sel && this.stage && sel.kind === "npc") {
+      const n = this.stage.npcs.find((x) => x.id === sel.id);
+      if (n) this.drawSelectionRing(...this.project(n.x + 0.5, n.y + 0.5, 0), 24, now);
+    } else if (sel && this.stage && sel.kind === "prop") {
+      const p = this.stage.props[sel.id];
+      if (p) this.drawSelectionRing(...this.project(p.x + (p.cx || 0.5), p.y + (p.cy || 0.5), 0), 34, now);
+    } else if (sel && sel.kind === "mob") {
+      const m = this.mobs.find((x) => x.id === sel.id);
+      if (m) this.drawSelectionRing(...this.project(m.x + 0.5 * m.scale, m.y + 0.5 * m.scale, 0), 26 * m.scale, now);
+    }
     c.fillStyle = "rgba(0,0,0,0.22)";
     for (const ent of this.entities.values()) {
       if (ent.owner) continue;
@@ -1839,10 +2265,11 @@ export class World {
       while (spotOf.length < props.length) spotOf.push(i - 1);
       if (kind === "tree") {
         const big = hash(i, 11) > 0.5;
-        props.push([x + 0.35, y + 0.35, 0, 0.3, 0.3, big ? 1.8 : 1.3, "#6b4527", 2]);
+        // The trunk stops under the leaves; the apple hangs on their face.
+        props.push([x + 0.35, y + 0.35, 0, 0.3, 0.3, big ? 1.5 : 1.0, "#6b4527", 2]);
         props.push([x - 0.4, y - 0.4, big ? 1.5 : 1.0, 1.4, 1.4, 0.9, "#3f8a2c", 3]);
         props.push([x - 0.1, y - 0.1, big ? 2.4 : 1.9, 0.8, 0.8, 0.5, "#4f9a35", 2]);
-        if (hash(i, 12) > 0.6) props.push([x + 0.55, y + 0.95, big ? 1.8 : 1.3, 0.14, 0.01, 0.14, "#e5534b", 0]);
+        if (hash(i, 12) > 0.6) props.push([x + 0.55, y + 1.002, big ? 1.8 : 1.3, 0.14, 0.01, 0.14, "#e5534b", 0]);
       } else if (kind === "lava") {
         const glow = 0.85 + 0.15 * Math.sin(now / 300 + i);
         props.push([x - 0.4, y - 0.4, -0.05, 1.3, 1.3, 0.1, shade("#f28c28", glow), 2]);
@@ -1875,7 +2302,11 @@ export class World {
       const [gx, gy] = [group[0][0], group[0][1]];
       list.push({ d: this.depthOf(gx + 0.5, gy + 0.5, 0), fn: () => this.drawModel(group,
         (p) => ({ x: p[0], y: p[1], z: p[2], w: p[3], d: p[4], h: p[5] }),
+<<<<<<< HEAD
         (p, pi) => ({ color: p[6], outline: "rgba(0,0,0,0.25)", tex: p[7] || 0, seed: gx * 3.1 + gy * 1.7 + pi })) });
+=======
+        (p, pi) => ({ color: p[6], outline: "rgba(0,0,0,0.25)", tex: p[7] || 0, seed: gx * 3.1 + gy * 1.7 + pi }), { solid: true }) });
+>>>>>>> c46f881 (lastfeatures)
     }
     // The town crier on his stage: everything printed outside of any object
     // comes out of his mouth.
@@ -1917,6 +2348,8 @@ export class World {
         (p) => ({ x: bx - 0.4 + shake + p.x * 1.8, y: by - 0.4 + p.y * 1.8, z: p.z * 1.8 + float, w: p.w * 1.8, d: p.d * 1.8, h: p.h * 1.8 }),
         (p, pi) => ({ color: now - b.hit < 300 ? "#ff5040" : p.c, outline: "rgba(0,0,0,0.3)", tex: 2, seed: pi * 3.7 }));
     } });
+    const box = this.screenBox(bx - 0.4, by - 0.4, parts.map((p) => ({ x: p.x * 1.8, y: p.y * 1.8, z: p.z * 1.8, w: p.w * 1.8, d: p.d * 1.8, h: p.h * 1.8 })));
+    this.hitboxes.push({ ...box, target: { kind: "boss" } });
   }
 
   drawOverlay(now) {

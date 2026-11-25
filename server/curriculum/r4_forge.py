@@ -58,10 +58,7 @@ print(isinstance(rex, Animal), issubclass(Animal, Wolf))
         "`rex.breathe()` : la méthode exécutée est définie dans Animal (fil doré), mais `self` est rex.",
         "`Wolf(\"Rex\")` utilise le constructeur hérité d'Animal.",
     ],
-    experiments=[
-        "Crée `generic = Animal(\"Bob\")` et appelle `generic.howl()`. Pourquoi l'erreur ?",
-        "Ajoute une classe `Fox(Animal)` sans aucune ligne dans son corps (juste `pass`). Que sait faire un renard ?",
-    ],
+    experiments=[],
     mission_title="Le bestiaire",
     mission="""Crée une classe parente `Mob` :
 
@@ -199,10 +196,7 @@ print(raft.name, raft.speed, raft.seats)
         "Pas à pas : l'exécution entre dans Boat.__init__, puis saute dans Vehicle.__init__ (rayon doré), puis revient.",
         "Les attributs name et speed sont créés par le parent, seats par l'enfant.",
     ],
-    experiments=[
-        "Commente la ligne `super().__init__(name, speed)`. Quels attributs manquent ?",
-        "Remplace super() par `Vehicle.__init__(self, name, speed)`. Fonctionne-t-il ? Pourquoi `super()` reste préférable ?",
-    ],
+    experiments=[],
     mission_title="Le garage du royaume",
     mission="""Crée :
 
@@ -324,10 +318,7 @@ blade.describe()
         "`blade.describe()` exécute la version de Sword, qui délègue d'abord à Tool.",
         "Les deux affichages viennent de deux classes différentes, sur le même objet.",
     ],
-    experiments=[
-        "Retire `super().describe()` : qu'est-ce qui disparaît ?",
-        "Dans Sword.describe, écris `self.describe()` au lieu de `super().describe()`. Que se passe-t-il, et pourquoi ?",
-    ],
+    experiments=[],
     mission_title="L'armurerie à trois étages",
     mission="""Crée une lignée à trois niveaux :
 

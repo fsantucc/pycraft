@@ -1,6 +1,62 @@
 // A small but real Python editor: highlighting, line numbers, auto-indent,
-// autocompletion, several files, execution / error markers.
+// autocompletion, several files, execution / error markers — and the help
+// of a real IDE kept simple for beginners: matching brackets (the pair at
+// the cursor lights up, a bracket without partner turns red), brackets in
+// three colours by depth, indentation guides, the line of the cursor,
+// brackets and quotes closed automatically, else/elif/except re-indented.
 import { el, esc } from "./util.js";
+
+const OPEN = { "(": ")", "[": "]", "{": "}" };
+const CLOSE = { ")": "(", "]": "[", "}": "{" };
+
+// Every bracket of the code (outside strings and comments): its partner,
+// its depth, or "bad" when it has none.
+export function scanBrackets(text) {
+  const pairs = new Map();
+  const depth = new Map();
+  const bad = new Map();   // position → message
+  const stack = [];
+  let i = 0;
+  const n = text.length;
+  while (i < n) {
+    const ch = text[i];
+    if (ch === "#") {
+      const end = text.indexOf("\n", i);
+      i = end === -1 ? n : end;
+      continue;
+    }
+    const m = /^[rbfuRBFU]{0,2}("""|'''|"|')/.exec(text.slice(i, i + 5));
+    if (m && (m[0].length === m[1].length || !/\w/.test(text[i - 1] || ""))) {
+      const quote = m[1];
+      let j = i + m[0].length;
+      while (j < n) {
+        if (text[j] === "\\") { j += 2; continue; }
+        if (text.startsWith(quote, j)) { j += quote.length; break; }
+        if (quote.length === 1 && text[j] === "\n") break;
+        j += 1;
+      }
+      i = j;
+      continue;
+    }
+    if (OPEN[ch]) {
+      depth.set(i, stack.length);
+      stack.push(i);
+    } else if (CLOSE[ch]) {
+      const top = stack.length ? stack[stack.length - 1] : -1;
+      if (top >= 0 && text[top] === CLOSE[ch]) {
+        stack.pop();
+        pairs.set(top, i);
+        pairs.set(i, top);
+        depth.set(i, stack.length);
+      } else {
+        bad.set(i, top >= 0 ? `« ${ch} » ne correspond pas à « ${text[top]} »` : `« ${ch} » fermée sans avoir été ouverte`);
+      }
+    }
+    i += 1;
+  }
+  for (const pos of stack) bad.set(pos, `« ${text[pos]} » jamais fermée`);
+  return { pairs, depth, bad };
+}
 
 const KEYWORDS = ["False", "None", "True", "and", "as", "assert", "break", "class", "continue",
   "def", "del", "elif", "else", "except", "finally", "for", "from", "global", "if", "import",
@@ -13,7 +69,7 @@ const BUILTINS = ["print", "range", "round", "len", "int", "str", "float", "bool
 const KW = new Set(KEYWORDS);
 const BI = new Set(BUILTINS);
 
-function highlightLine(text, state) {
+function highlightLine(text, state, offset = 0, br = null) {
   // state.triple: current open triple-quote delimiter or null
   let out = "";
   let i = 0;
@@ -23,6 +79,14 @@ function highlightLine(text, state) {
     out += `<span class="tk-str">${esc(text.slice(0, end + 3))}</span>`;
     i = end + 3;
     state.triple = null;
+  } else {
+    // Indentation guides: one thin line per level of 4 spaces.
+    const lead = /^ */.exec(text)[0].length;
+    const levels = Math.floor(lead / 4);
+    if (levels && lead < text.length) {
+      out += `<span class="ig">    </span>`.repeat(levels);
+      i = levels * 4;
+    }
   }
   let prev = "";
   while (i < text.length) {
@@ -73,8 +137,17 @@ function highlightLine(text, state) {
       i += w.length;
       continue;
     }
-    out += esc(rest[0]);
-    if (!/\s/.test(rest[0])) prev = rest[0];
+    const ch = rest[0];
+    if (br && (OPEN[ch] || CLOSE[ch])) {
+      const pos = offset + i;
+      let cls = `br br${(br.depth.get(pos) || 0) % 3}`;
+      if (br.bad.has(pos)) cls = "br br-bad";
+      if (br.match.has(pos)) cls += " br-match";
+      out += `<span class="${cls}">${esc(ch)}</span>`;
+    } else {
+      out += esc(ch);
+    }
+    if (!/\s/.test(ch)) prev = ch;
     i += 1;
   }
   return out;
@@ -100,7 +173,15 @@ export class Editor {
     this.area.addEventListener("scroll", () => this.syncScroll());
     this.area.addEventListener("keydown", (e) => this.handleKey(e));
     this.area.addEventListener("click", () => this.closePopup());
-    this.area.addEventListener("blur", () => setTimeout(() => this.closePopup(), 150));
+    this.area.addEventListener("blur", () => {
+      setTimeout(() => this.closePopup(), 150);
+      this.renderCaret();
+    });
+    this.area.addEventListener("focus", () => this.renderCaret());
+    // The bracket pair and the line of the cursor follow the cursor.
+    document.addEventListener("selectionchange", () => {
+      if (document.activeElement === this.area) this.renderCaret();
+    });
     this.charWidth = this.measureChar();
   }
 
@@ -168,9 +249,59 @@ export class Editor {
     this.scrollToLine(line);
   }
 
+  // Only the cursor moved: redraw if the bracket pair or the line changed.
+  renderCaret() {
+    const key = this.caretKey();
+    if (key !== this.lastCaret) this.render();
+  }
+
+  caretKey() {
+    const focused = document.activeElement === this.area;
+    const pos = this.area.selectionStart;
+    const value = this.area.value;
+    const line = value.slice(0, pos).split("\n").length;
+    const match = this.matchAt(pos);
+    return `${focused}:${line}:${match ? match.join("-") : ""}`;
+  }
+
+  // The bracket next to the cursor (just before it, else just after it)
+  // and its partner.
+  matchAt(pos) {
+    const br = this.brackets;
+    if (!br) return null;
+    for (const p of [pos - 1, pos]) {
+      if (br.pairs.has(p)) return [p, br.pairs.get(p)];
+      if (br.bad.has(p)) return [p];
+    }
+    return null;
+  }
+
   render() {
-    const lines = this.area.value.split("\n");
+    const value = this.area.value;
+    const lines = value.split("\n");
     const state = { triple: null };
+    this.brackets = scanBrackets(value);
+    const match = this.matchAt(this.area.selectionStart);
+    const br = { ...this.brackets, match: new Set(match || []) };
+    const focused = document.activeElement === this.area;
+    const caretLine = value.slice(0, this.area.selectionStart).split("\n").length;
+    // Lines holding a bracket without partner (a red mark in the gutter).
+    const badLines = new Map();
+    let offset = 0;
+    const starts = lines.map((t) => {
+      const s0 = offset;
+      offset += t.length + 1;
+      return s0;
+    });
+    for (const [pos, msg] of this.brackets.bad) {
+      let lo = 0;
+      let hi = starts.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (starts[mid] <= pos) lo = mid; else hi = mid - 1;
+      }
+      if (!badLines.has(lo + 1)) badLines.set(lo + 1, msg);
+    }
     const mark = (list) => new Map(list.filter((m) => (m.file || "main.py") === this.active)
       .map((m) => [m.line, m]));
     const errs = mark(this.markers.errors);
@@ -184,13 +315,16 @@ export class Editor {
       let cls = "ed-line";
       let g = "";
       if (errs.has(n)) { cls += " err"; g = "g-err"; } else if (warns.has(n)) { cls += " warn"; g = "g-warn"; }
+      if (badLines.has(n) && !g) g = "g-bad";
       if (n === cur) { cls += " cur"; g = g || "g-cur"; }
-      html += `<span class="${cls}">${highlightLine(text, state) || " "}</span>`;
-      const title = (errs.get(n) || warns.get(n) || {}).msg;
+      if (focused && n === caretLine) cls += " caret";
+      html += `<span class="${cls}">${highlightLine(text, state, starts[idx], br) || " "}</span>`;
+      const title = (errs.get(n) || warns.get(n) || {}).msg || badLines.get(n);
       gutter += `<div class="${g}"${title ? ` title="${esc(title)}"` : ""}>${n === cur ? "▶" : ""}${n}</div>`;
     });
     this.pre.innerHTML = html;
     this.gutter.innerHTML = gutter;
+    this.lastCaret = this.caretKey();
     this.syncScroll();
   }
 
@@ -247,20 +381,104 @@ export class Editor {
       e.preventDefault();
       const { text } = this.currentLine();
       let indent = text.match(/^\s*/)[0];
+      const { selectionStart: s, value } = this.area;
+      const before = value[s - 1];
+      const after = value[s];
       if (/:\s*(#.*)?$/.test(text)) indent += "    ";
       if (/^\s*(return|pass|break|continue|raise)\b/.test(text)) indent = indent.slice(4);
+      if (OPEN[before] && after === OPEN[before]) {
+        // Between a pair of brackets: the content goes on its own line.
+        this.insert(`\n${indent}    \n${indent}`);
+        const pos = this.area.selectionStart - indent.length - 1;
+        this.area.setSelectionRange(pos, pos);
+        return;
+      }
       this.insert("\n" + indent);
+    } else if (OPEN[e.key] || e.key === '"' || e.key === "'") {
+      this.typePair(e);
+    } else if (CLOSE[e.key]) {
+      // Typing the closing bracket that is already there: just step over it.
+      const { selectionStart: s, selectionEnd: end, value } = this.area;
+      if (s === end && value[s] === e.key) {
+        e.preventDefault();
+        this.area.setSelectionRange(s + 1, s + 1);
+      }
+    } else if (e.key === ":") {
+      this.dedentKeyword();
     } else if (e.key === "Backspace") {
       const { selectionStart: s, selectionEnd: end } = this.area;
       const { text } = this.currentLine();
+      const { value } = this.area;
       if (s === end && text.length > 0 && /^ +$/.test(text) && text.length % 4 === 0) {
         e.preventDefault();
         this.area.setSelectionRange(s - 4, s);
+        this.insert("");
+      } else if (s === end && s > 0 && (OPEN[value[s - 1]] === value[s] || (/["']/.test(value[s - 1]) && value[s - 1] === value[s]))) {
+        // An empty pair: both go.
+        e.preventDefault();
+        this.area.setSelectionRange(s - 1, s + 1);
         this.insert("");
       }
     } else if ((e.ctrlKey || e.metaKey) && e.key === "/") {
       e.preventDefault();
       this.toggleComment();
+    }
+  }
+
+  // ( [ { " ' : the closing one comes with it (around the selection if
+  // there is one); a quote already there is stepped over.
+  typePair(e) {
+    const { selectionStart: s, selectionEnd: end, value } = this.area;
+    const ch = e.key;
+    const close = OPEN[ch] || ch;
+    const next = value[s] || "";
+    const prev = value[s - 1] || "";
+    if (s !== end) {
+      e.preventDefault();
+      const inside = value.slice(s, end);
+      this.insert(ch + inside + close);
+      this.area.setSelectionRange(s + 1, s + 1 + inside.length);
+      return;
+    }
+    if (!OPEN[ch]) {
+      if (next === ch) {
+        e.preventDefault();
+        this.area.setSelectionRange(s + 1, s + 1);
+        return;
+      }
+      // Not after a letter (an apostrophe in a word) nor before one.
+      if (/\w/.test(prev) || /\w/.test(next)) return;
+    } else if (next && !/[\s)\]}:,]/.test(next)) {
+      return;
+    }
+    e.preventDefault();
+    this.insert(ch + close);
+    this.area.setSelectionRange(s + 1, s + 1);
+  }
+
+  // else: / elif …: / except …: / finally: go back to the level of the
+  // block they continue (as VS Code does).
+  dedentKeyword() {
+    const { selectionStart: s, selectionEnd: end, value } = this.area;
+    if (s !== end) return;
+    const start = value.lastIndexOf("\n", s - 1) + 1;
+    const typed = value.slice(start, s);
+    const m = /^( *)(else|elif\b.*|except\b.*|finally)\s*$/.exec(typed);
+    if (!m) return;
+    const indent = m[1].length;
+    const prevLines = value.slice(0, start).split("\n").reverse();
+    for (const line of prevLines) {
+      if (!line.trim()) continue;
+      const lead = /^ */.exec(line)[0].length;
+      if (lead < indent && /^ *(if|elif|else|for|while|try|except|with)\b/.test(line)) {
+        if (lead === indent) return;
+        this.area.setSelectionRange(start, start + indent);
+        this.insert(" ".repeat(lead));
+        const pos = start + lead + m[2].length;
+        this.area.setSelectionRange(pos, pos);
+        return;
+      }
+      if (lead < indent) return;
     }
   }
 
@@ -302,8 +520,17 @@ export class Editor {
     } else {
       KEYWORDS.forEach((k) => add(k, "mot-clé"));
       BUILTINS.forEach((b) => add(b, "intégré"));
-      for (const m of code.matchAll(/class (\w+)/g)) add(m[1], "classe");
-      for (const m of code.matchAll(/def (\w+)/g)) add(m[1], "fonction");
+      // Names of this file, then of the other files of the level (what
+      // can be imported from them).
+      const others = Object.entries(this.files).filter(([name]) => name !== this.active).map(([name, text]) => [name, text]);
+      for (const [where, text] of [["", code], ...others]) {
+        const from = where ? ` · ${where}` : "";
+        for (const m of text.matchAll(/^\s*class (\w+)/gm)) add(m[1], `classe${from}`);
+        for (const m of text.matchAll(/^\s*def (\w+)\(([^)]*)\)/gm)) {
+          const params = m[2].split(",").map((p) => p.split(":")[0].trim()).filter((p) => p && p !== "self" && p !== "cls");
+          add(m[1], `fonction(${params.join(", ")})${from}`);
+        }
+      }
       for (const m of code.matchAll(/\b([a-z_]\w*)\s*=/g)) add(m[1], "variable");
       add("__init__", "constructeur");
       add("__name__", "spécial");

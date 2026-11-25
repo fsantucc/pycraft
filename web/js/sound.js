@@ -345,6 +345,35 @@ const SOUNDS = {
   whoosh(g, out, t) {
     noise(g, out, t, { dur: 0.35, vol: 0.3, type: "bandpass", freq: 400, to: 2400, q: 1.2, a: 0.08 });
   },
+  // A flame catching (a lantern, a torch, a furnace): a soft breath of
+  // air, then a warm crackle.
+  ignite(g, out, t) {
+    noise(g, out, t, { dur: 0.45, vol: 0.28, type: "bandpass", freq: 300, to: 1600, q: 0.9, a: 0.06 });
+    for (let i = 0; i < 5; i += 1) noise(g, out, t + 0.18 + i * 0.07 + rand(0, 0.03), { dur: 0.03, vol: 0.16, type: "highpass", freq: rand(2500, 4500), q: 1 });
+    bell(g, out, t + 0.12, mtof(79), 0.05, 0.6);
+  },
+  // Metal on metal (an anvil, a gate).
+  clang(g, out, t) {
+    bell(g, out, t, rand(880, 940), 0.16, 0.9);
+    bell(g, out, t, rand(1310, 1390), 0.08, 0.6);
+    noise(g, out, t, { dur: 0.06, vol: 0.25, type: "highpass", freq: 3000, q: 0.8 });
+  },
+  splash(g, out, t) {
+    noise(g, out, t, { dur: 0.5, vol: 0.32, type: "lowpass", freq: 2600, to: 500, q: 0.6, a: 0.01 });
+    for (let i = 0; i < 4; i += 1) chip(g, out, t + 0.08 + i * 0.06, rand(900, 1600), 0.05, 0.04, "sine", rand(300, 600));
+  },
+  // A wooden door or a lid.
+  door(g, out, t) {
+    noise(g, out, t, { dur: 0.3, vol: 0.2, type: "bandpass", freq: 700, to: 350, q: 3, a: 0.04 });
+    thump(g, out, t + 0.26, 140, 70, 0.4, 0.18);
+  },
+  // A creature answers: a short voice, its pitch says which one.
+  creature(g, out, t, opts = {}) {
+    const f = opts.pitch || 220;
+    chip(g, out, t, f, 0.16, 0.22, "sawtooth", f * 0.7);
+    chip(g, out, t + 0.12, f * 0.85, 0.12, 0.18, "triangle", f * 0.6);
+    noise(g, out, t, { dur: 0.25, vol: 0.08, type: "bandpass", freq: f * 3, q: 2 });
+  },
   victory(g, out, t) {
     const chords = [[60, 64, 67], [65, 69, 72], [67, 71, 74], [72, 76, 79, 84]];
     chords.forEach((ch, i) => {
@@ -413,6 +442,11 @@ const MIX = {
   levelup: ["sfx", 1, 0.45], step: ["sfx", 0.6, 0.05],
   heartbeat: ["sfx", 1, 0.2], drone: ["sfx", 0.9, 0.6], chime: ["sfx", 1, 0.6], riser: ["sfx", 0.9, 0.45],
   impact: ["sfx", 1, 0.5],
+<<<<<<< HEAD
+=======
+  ignite: ["sfx", 0.9, 0.35], clang: ["sfx", 0.8, 0.4], splash: ["sfx", 0.8, 0.3], door: ["sfx", 0.8, 0.2],
+  creature: ["sfx", 0.8, 0.25],
+>>>>>>> c46f881 (lastfeatures)
 };
 const DUCK = new Set(["victory", "achievement", "levelup", "boom", "fail", "impact", "drone", "riser"]);
 
