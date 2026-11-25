@@ -442,11 +442,8 @@ const MIX = {
   levelup: ["sfx", 1, 0.45], step: ["sfx", 0.6, 0.05],
   heartbeat: ["sfx", 1, 0.2], drone: ["sfx", 0.9, 0.6], chime: ["sfx", 1, 0.6], riser: ["sfx", 0.9, 0.45],
   impact: ["sfx", 1, 0.5],
-<<<<<<< HEAD
-=======
   ignite: ["sfx", 0.9, 0.35], clang: ["sfx", 0.8, 0.4], splash: ["sfx", 0.8, 0.3], door: ["sfx", 0.8, 0.2],
   creature: ["sfx", 0.8, 0.25],
->>>>>>> c46f881 (lastfeatures)
 };
 const DUCK = new Set(["victory", "achievement", "levelup", "boom", "fail", "impact", "drone", "riser"]);
 

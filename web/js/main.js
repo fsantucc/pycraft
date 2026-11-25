@@ -11,10 +11,7 @@ import { heartPulse, heartWave, sealInfo, setHeart } from "./coeur.js";
 import { finaleCinematic } from "./finale.js";
 import { Tour } from "./tour.js";
 import { TRAILER_KEY, Trailer } from "./trailer.js";
-<<<<<<< HEAD
-=======
 import { reactionState } from "./reactions.js";
->>>>>>> c46f881 (lastfeatures)
 import { TraceModel, describe } from "./trace.js";
 import { api, el, esc, md, pushToast, showValue, toast } from "./util.js";
 import { World } from "./world.js";
@@ -358,11 +355,6 @@ class App {
       this.renderSide();
     }));
     window.addEventListener("keydown", (e) => {
-<<<<<<< HEAD
-      if (this.world.cinematic || document.body.classList.contains("trailer-on")) {
-        // The start card of the trailer: Enter or Space press its button.
-        if (document.activeElement && document.activeElement.closest(".tr-start")) return;
-=======
       const covered = !$("overlay").classList.contains("hidden");
       if (this.world.cinematic || document.body.classList.contains("trailer-on")) {
         // The start card of the trailer: Enter or Space press its button.
@@ -376,7 +368,6 @@ class App {
           }
           return;
         }
->>>>>>> c46f881 (lastfeatures)
         // A cinematic handles its own keys (← ⏸ →); nothing else meanwhile.
         if (["Escape", " ", "F5", "F10", "Enter"].includes(e.key)) e.preventDefault();
         return;
@@ -961,14 +952,6 @@ class App {
     if (target && (target.kind === "heart" || target.kind === "seal")) {
       heartPulse(this.world);
       sound.play(target.kind === "heart" ? "heartbeat" : "chime", { note: 72 + (target.id || 0) * 4 });
-<<<<<<< HEAD
-      return;
-    }
-    if (target && target.kind === "npc") {
-      // Clicking a character of the story: he tells his story again.
-      if (!this.world.cinematic) this.replayStory();
-=======
->>>>>>> c46f881 (lastfeatures)
       return;
     }
     if (target && ["npc", "prop", "mob", "boss"].includes(target.kind)) {
@@ -1223,11 +1206,7 @@ class App {
 
   hover(target, e) {
     const tip = $("tooltip");
-<<<<<<< HEAD
-    if (!target || (!this.state && !["npc", "heart", "seal"].includes(target.kind))) {
-=======
     if (!target || (!this.state && !["npc", "heart", "seal", "prop", "mob", "boss"].includes(target.kind))) {
->>>>>>> c46f881 (lastfeatures)
       tip.classList.add("hidden");
       return;
     }

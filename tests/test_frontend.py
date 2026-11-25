@@ -527,8 +527,6 @@ def test_returning_player_trailer(server_url: str) -> None:
         page.wait_for_selector(".trailer", state="detached", timeout=5000)
         page.wait_for_timeout(600)
         assert page.evaluate("window.pycraft.level.id") == level["id"]
-<<<<<<< HEAD
-=======
         browser.close()
     assert not errors, errors
 
@@ -847,6 +845,5 @@ def test_editor_helps_with_brackets_and_indentation(server_url: str) -> None:
             document.dispatchEvent(new Event('selectionchange')); }""")
         page.wait_for_timeout(200)
         assert page.locator("#editor .br-match").count() == 2
->>>>>>> c46f881 (lastfeatures)
         browser.close()
     assert not errors, errors

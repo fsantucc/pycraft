@@ -496,8 +496,6 @@ SCENES: dict[str, dict[str, Any]] = {
 }
 # The last level has its own cinematic (see web/js/finale.js).
 SCENES["k3l1"]["cinematic"] = "finale"
-<<<<<<< HEAD
-=======
 
 # What the programs of a level do to its world. The patterns use what the
 # demonstration and the mission (its locked tester, the names it imposes)
@@ -735,4 +733,3 @@ RULES: dict[str, list[dict[str, Any]]] = {
 }
 for _level, _rules in RULES.items():
     SCENES[_level]["react"] = _rules
->>>>>>> c46f881 (lastfeatures)

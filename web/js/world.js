@@ -99,14 +99,11 @@ export class World {
     this.time = 0;
     this.paused = false;
     this.later = [];
-<<<<<<< HEAD
-=======
     // Night falling on the world (a program can make it happen): 0 day, 1 night.
     this.night = { from: 0, to: 0, t0: 0, dur: 1 };
     // Smooth camera moves asked by the player (zoom, recentre, focus).
     this.panTo = null;
     this.zoomTo = null;
->>>>>>> c46f881 (lastfeatures)
     this.particles = new Particles(() => this.time);
     this.shake = { until: 0, amp: 0 };
     this.flash = { until: 0, color: "#fff", t0: 0 };
@@ -614,11 +611,8 @@ export class World {
       const life = dur || Math.min(9000, 2400 + String(text).length * 45);
       this.npcPose(n.id, "talk", Math.min(life, 2200));
       sound.voice(String(text), voiceOf(n), { pan: this.panAt(this.npcTop(n.id)) });
-<<<<<<< HEAD
-=======
       // One bubble per character: a new line replaces the previous one.
       this.effects = this.effects.filter((f) => !(f.kind === "bubble" && f.owner === `npc:${n.id}`));
->>>>>>> c46f881 (lastfeatures)
       this.addEffect({ kind: "bubble", at: this.npcTop(n.id), text: answer ? `🗣 ${text}` : String(text), dur: life, owner: `npc:${n.id}`, npc: true });
     };
     if (delay) this.introTimers.push(setTimeout(go, delay)); else go();
@@ -650,8 +644,6 @@ export class World {
   // A camera move during a cinematic: from one point of view to another,
   // over `dur` ms of world time. at = [x, y, z] in the world; zoom = 1 shows
   // the whole map. cut: jump there at once (a new scene).
-<<<<<<< HEAD
-=======
   // ------------------------------------------------ camera of the player
   // The playable map never leaves the screen: at least a good part of it
   // stays visible whatever the drag, the zoom or the size of the window.
@@ -767,7 +759,6 @@ export class World {
     c.restore();
   }
 
->>>>>>> c46f881 (lastfeatures)
   shot(from, to = null, dur = 1000, { cut = true, ease = true } = {}) {
     this.camShot = { from, to: to || from, dur, t0: this.now(), ease };
     if (cut) this.snapCam = true;
@@ -782,15 +773,11 @@ export class World {
     const zoom = mix(s.from.zoom, s.to.zoom);
     const [u, v] = this.unit(at[0], at[1], at[2]);
     const fit = Math.min(this.width / 860, this.height / 560);
-<<<<<<< HEAD
-    return { k: fit * zoom, u, v, speed: 6 };
-=======
     const k = fit * zoom;
     // shift: where the subject sits on screen (fractions of the view from
     // the centre), e.g. to leave room for a card.
     const [fx, fy] = s.from.shift || [0, 0];
     return { k, u: u - (fx * this.width) / k, v: v - (fy * this.height) / k, speed: 6 };
->>>>>>> c46f881 (lastfeatures)
   }
 
   // A slow dolly towards the scene (the camera starts a little further away
@@ -1091,15 +1078,9 @@ export class World {
       const bump = prop.pulseAt && now - prop.pulseAt < 400 ? Math.sin(((now - prop.pulseAt) / 400) * Math.PI) * 0.12 : 0;
       list.push({ d: this.depthOf(prop.x + cx, prop.y + cy, 0), fn: () => {
         this.drawModel(parts,
-<<<<<<< HEAD
-          (p) => ({ x: prop.x + p.x, y: prop.y + p.y, z: p.z, w: p.w, d: p.d, h: p.h }),
-          (p, pi) => ({ color: p.c, outline: p.role === "flame" ? null : "rgba(0,0,0,0.25)",
-            tex: p.w * p.h > 0.3 && p.role !== "flame" ? 2 : 0, seed: prop.seed + pi * 2.3 }));
-=======
           (p) => ({ x: prop.x + p.x, y: prop.y + p.y, z: p.z + bump, w: p.w, d: p.d, h: p.h }),
           (p, pi) => ({ color: p.c, outline: p.role === "flame" ? null : "rgba(0,0,0,0.25)",
             tex: p.w * p.h > 0.3 && p.role !== "flame" ? 2 : 0, seed: prop.seed + pi * 2.3 }), { solid: true });
->>>>>>> c46f881 (lastfeatures)
       } });
       // Clickable: the screen box of the model.
       const box = this.screenBox(prop.x, prop.y, parts);
@@ -1278,11 +1259,7 @@ export class World {
     const k = this.cam.k * this.zoom;
     c.save();
     c.globalCompositeOperation = "lighter";
-<<<<<<< HEAD
-    const glow = this.theme.night ? ["88", "3a"] : ["50", "1e"];
-=======
     const glow = this.theme.night || this.nightLevel() > 0.5 ? ["88", "3a"] : ["50", "1e"];
->>>>>>> c46f881 (lastfeatures)
     for (const item of [...st.props, ...st.npcs]) {
       for (const [lx, ly, lz, color] of item.lights || []) {
         const [x, y] = this.project(item.x + lx, item.y + ly, lz);
@@ -1739,8 +1716,6 @@ export class World {
       if (Math.abs(target.u - this.cam.u) < 0.02) this.cam.u = target.u;
       if (Math.abs(target.v - this.cam.v) < 0.02) this.cam.v = target.v;
     }
-<<<<<<< HEAD
-=======
     if (this.panTo) {
       const a = Math.min(1, camDt * 7);
       this.pan.x += (this.panTo.x - this.pan.x) * a;
@@ -1758,7 +1733,6 @@ export class World {
       }
     }
     if (this.width > 0 && !this.cinematic && !this.trailerActive) this.keepMapInView();
->>>>>>> c46f881 (lastfeatures)
     if (this.later.length) {
       const due = this.later.filter((l) => l.at <= now);
       this.later = this.later.filter((l) => l.at > now);
@@ -1862,17 +1836,11 @@ export class World {
   // Draws the boxes of one model (character, prop, boss…) in the right
   // order. place(p) gives the box of a part in the world; style(p) its
   // color, outline, texture and alpha. See depth.js for the ordering.
-<<<<<<< HEAD
-  drawModel(parts, place, style) {
-    const boxes = parts.map((p, pi) => ({ ...place(p, pi), p, pi }));
-    for (const b of orderBoxes(boxes, (x, y) => this.rotate(x, y))) {
-=======
   // solid: scenery made of solid blocks (see depth.js); characters keep the
   // order of their model.
   drawModel(parts, place, style, { solid = false } = {}) {
     const boxes = parts.map((p, pi) => ({ ...place(p, pi), p, pi }));
     for (const b of orderBoxes(boxes, (x, y) => this.rotate(x, y), { solid })) {
->>>>>>> c46f881 (lastfeatures)
       const st = style(b.p, b.pi);
       if (!st) continue;
       this.box(b.x, b.y, b.z, b.w, b.d, b.h, st.color, st.alpha ?? 1, st.outline === undefined ? "rgba(0,0,0,0.26)" : st.outline,
@@ -2302,11 +2270,7 @@ export class World {
       const [gx, gy] = [group[0][0], group[0][1]];
       list.push({ d: this.depthOf(gx + 0.5, gy + 0.5, 0), fn: () => this.drawModel(group,
         (p) => ({ x: p[0], y: p[1], z: p[2], w: p[3], d: p[4], h: p[5] }),
-<<<<<<< HEAD
-        (p, pi) => ({ color: p[6], outline: "rgba(0,0,0,0.25)", tex: p[7] || 0, seed: gx * 3.1 + gy * 1.7 + pi })) });
-=======
         (p, pi) => ({ color: p[6], outline: "rgba(0,0,0,0.25)", tex: p[7] || 0, seed: gx * 3.1 + gy * 1.7 + pi }), { solid: true }) });
->>>>>>> c46f881 (lastfeatures)
     }
     // The town crier on his stage: everything printed outside of any object
     // comes out of his mouth.

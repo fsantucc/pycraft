@@ -184,8 +184,6 @@ Cœur endormi, allume les sceaux un à un, puis l'éveil et l'explosion de lumi�
 que le gardien ne parle. Pendant la mission, chaque vérification réussie rallume les
 sceaux ; la réussite éveille complètement le Cœur. Clique sur le Cœur ou sur un sceau
 pour l'écouter. Code : `web/js/coeur.js` (le lieu) et `web/js/finale.js` (la cinématique).
-<<<<<<< HEAD
-=======
 
 **Objectif de chaque niveau** : en haut de la leçon, « 📚 Tu apprends » (les notions) et
 « 🎯 Ta mission ». À l'étape **Essais**, chaque expérience dit quoi changer (ou le fait
@@ -216,7 +214,6 @@ réussite ; « Lui parler » passe à la réplique suivante), et son rôle dans 
 aussi (coffre et porte qui s'ouvrent, état de la forge ou de la lanterne, panneau de la
 mission…), comme les créatures (elles réagissent à l'approche du pointeur) et les boss.
 Quelques secrets, clins d'œil à 42, sont cachés dans le monde (succès cachés).
->>>>>>> c46f881 (lastfeatures)
 
 **Scènes d'histoire** : chaque niveau (les 43) a sa scène dans le coin droit de la carte,
 avec les personnages et le décor de l'histoire (le villageois et sa maison à éclairer, le
