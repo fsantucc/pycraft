@@ -1,0 +1,45 @@
+{
+ "version": 1,
+ "xp": 0,
+ "levels": {
+  "a1l1": {
+   "steps_seen": [
+    "story"
+   ],
+   "mission_passed": false,
+   "attempts": 0,
+   "hints_used": 0,
+   "quiz": {},
+   "code": {},
+   "xp": {},
+   "quality_bonus": false,
+   "history": [],
+   "reviewing": false
+  }
+ },
+ "rewards": [],
+ "created": 1795619995.544532,
+ "stats": {
+  "runs": 3,
+  "errors": {},
+  "fixed": 0,
+  "first_try": 1,
+  "stubborn": 0,
+  "steps": 0,
+  "spots": 0,
+  "tour_done": false,
+  "night": false,
+  "days": [
+   "2026-11-25"
+  ],
+  "time": {
+   "a1l1": 270
+  },
+  "broken": {},
+  "eggs": []
+ },
+ "achievements": {
+  "first_run": 1795620119.402287,
+  "first_try": 1795620189.7166731
+ }
+}
