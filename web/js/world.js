@@ -107,9 +107,18 @@ export class World {
     this.particles = new Particles(() => this.time);
     this.shake = { until: 0, amp: 0 };
     this.flash = { until: 0, color: "#fff", t0: 0 };
-    this.groundCache = document.createElement("canvas");
-    this.groundKey = "";
-    this.groundReady = false;
+    // The ground, rendered once per theme / rotation / resolution (see
+    // drawGround), the last ones used kept for the next time.
+    this.groundCaches = new Map();
+    this.groundKeep = 3;
+    this.groundMaxK = 4;
+    // Quality: the drawing resolution adapts to the machine (see govern()).
+    // ?quality=high keeps it at the maximum, ?quality=low starts at the
+    // minimum.
+    const forced = new URLSearchParams(window.location.search).get("quality");
+    this.quality = { scale: forced === "low" ? 0.5 : 1, low: forced === "low", fixed: !!forced,
+      ema: 16, slowSince: 0, hitch: false, changes: 0, lastError: null };
+    this.particles.low = this.quality.low;
     this.stableFrames = 0;
     this.crierSpeakAt = 0;
     this.crierAct = null;
@@ -149,15 +158,66 @@ export class World {
   }
 
   // ------------------------------------------------------------ camera
+  // Pixels drawn per CSS pixel: the screen density, lowered on machines
+  // too slow to draw them all (never below 1 pixel for 2 CSS pixels).
+  pixelRatio() {
+    const dpr = window.devicePixelRatio || 1;
+    return Math.max(0.5, dpr * this.quality.scale);
+  }
+
   resize() {
     const box = this.canvas.parentElement.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    const pr = this.pixelRatio();
     this.width = box.width;
     this.height = box.height;
-    this.canvas.width = box.width * dpr;
-    this.canvas.height = box.height * dpr;
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.canvas.width = Math.max(1, Math.round(box.width * pr));
+    this.canvas.height = Math.max(1, Math.round(box.height * pr));
+    this.ctx.setTransform(pr, 0, 0, pr, 0, 0);
+    this.quality.hitch = true;
+  }
 
+  // Adapts the quality to the machine. A frame that keeps taking more than
+  // ~45 ms (fewer than ~22 images per second) for more than a second: the
+  // world is drawn with fewer pixels (3/4, then 1/2 of the screen density),
+  // then without the small textures and glows, then (last resort) with one
+  // pixel for two CSS pixels. Frames that rebuilt the ground (a new place)
+  // do not count. It only goes down, never up again, so the picture never
+  // flickers between two qualities.
+  govern(frame, real) {
+    const q = this.quality;
+    if (q.fixed || document.hidden) return;
+    if (q.hitch) {
+      q.hitch = false;
+      return;
+    }
+    q.ema = q.ema * 0.9 + Math.min(real, 400) * 0.1;
+    if (q.ema < 45) {
+      q.slowSince = 0;
+      return;
+    }
+    if (!q.slowSince) {
+      q.slowSince = frame;
+      return;
+    }
+    if (frame - q.slowSince < 1200) return;
+    q.slowSince = 0;
+    q.ema = 30;
+    const dpr = window.devicePixelRatio || 1;
+    const next = q.scale > 0.75 ? 0.75 : 0.5;
+    if (dpr * q.scale > 0.6 && next < q.scale && dpr * next >= 0.5) {
+      q.scale = next;
+      q.changes += 1;
+      this.resize();
+    } else if (!q.low) {
+      q.low = true;
+      this.particles.low = true;
+      q.changes += 1;
+    } else if (dpr * q.scale > 0.55) {
+      // Last resort: one pixel for two CSS pixels — blurry, but fluid.
+      q.scale = 0.5 / dpr;
+      q.changes += 1;
+      this.resize();
+    }
   }
 
   rotate(x, y) {
@@ -801,7 +861,7 @@ export class World {
     c.fillStyle = "rgba(255,255,255,0.28)";
     for (const dx of [-w * 1.25, w * 0.25]) {
       c.beginPath();
-      c.roundRect(this.width / 2 + dx, this.height / 2 - h / 2, w, h, w / 3);
+      roundRect(c, this.width / 2 + dx, this.height / 2 - h / 2, w, h, w / 3);
       c.fill();
     }
     c.restore();
@@ -821,70 +881,54 @@ export class World {
     if (this.grade) this.grade.pulseAt = this.now();
   }
 
+  // The look of a cinematic shot, drawn over the world. Only plain fills
+  // and one small cached image: blend modes (saturation, soft light…) and
+  // canvas filters were far too slow — or wrong — on some machines.
+  //   vignette: { strength, tint }  dark edges, an optional colour wash
+  //   black: darkness, a faint heart-red glow that beats (gradePulse)
   drawGrade(now) {
     const g = this.grade;
     if (!g) return;
     const c = this.ctx;
     const { width: w, height: h } = this;
-    const t = now - g.t0;
     c.save();
-    if (g.kind === "memory") {
-      if (t < 420) {
-        c.filter = `blur(${((1 - t / 420) * 7).toFixed(2)}px)`;
-        c.drawImage(c.canvas, 0, 0, w, h);
-        c.filter = "none";
+    if (g.kind === "vignette") {
+      if (g.tint) {
+        c.fillStyle = g.tint;
+        c.fillRect(0, 0, w, h);
       }
-      c.globalCompositeOperation = "saturation";
-      c.fillStyle = "rgba(128,128,128,0.22)";
-      c.fillRect(0, 0, w, h);
-      c.globalCompositeOperation = "soft-light";
-      c.fillStyle = "rgba(255,206,140,0.42)";
-      c.fillRect(0, 0, w, h);
-      // A light leak, from a corner that changes from memory to memory.
-      c.globalCompositeOperation = "screen";
-      const corner = [[0, 0], [w, 0], [w, h], [0, h]][g.seed % 4];
-      const leak = c.createRadialGradient(corner[0], corner[1], 0, corner[0], corner[1], Math.max(w, h) * 0.55);
-      leak.addColorStop(0, "rgba(255,190,120,0.30)");
-      leak.addColorStop(1, "rgba(255,190,120,0)");
-      c.fillStyle = leak;
-      c.fillRect(0, 0, w, h);
-      c.globalCompositeOperation = "source-over";
-      const v = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.72);
-      v.addColorStop(0, "rgba(40,22,8,0)");
-      v.addColorStop(1, "rgba(40,22,8,0.55)");
-      c.fillStyle = v;
-      c.fillRect(0, 0, w, h);
-    } else if (g.kind === "approach") {
-      // Closes in during the shot.
-      const k = g.strength * (0.6 + 0.4 * Math.min(1, t / 3000));
-      c.globalCompositeOperation = "saturation";
-      c.fillStyle = `rgba(128,128,128,${(0.3 * k).toFixed(3)})`;
-      c.fillRect(0, 0, w, h);
-      c.globalCompositeOperation = "multiply";
-      c.fillStyle = `rgba(70,58,130,${(0.5 * k).toFixed(3)})`;
-      c.fillRect(0, 0, w, h);
-      c.globalCompositeOperation = "soft-light";
-      c.fillStyle = `rgba(70,40,150,${(0.55 * k).toFixed(3)})`;
-      c.fillRect(0, 0, w, h);
-      c.globalCompositeOperation = "source-over";
-      const v = c.createRadialGradient(w / 2, h / 2, Math.min(w, h) * (0.42 - 0.14 * k), w / 2, h / 2, Math.max(w, h) * 0.7);
-      v.addColorStop(0, "rgba(6,2,20,0)");
-      v.addColorStop(1, `rgba(6,2,20,${(0.78 * k).toFixed(3)})`);
-      c.fillStyle = v;
-      c.fillRect(0, 0, w, h);
+      c.globalAlpha = Math.max(0, Math.min(1, g.strength));
+      c.drawImage(this.vignetteImage(), 0, 0, w, h);
     } else if (g.kind === "black") {
       c.fillStyle = "#000";
       c.fillRect(0, 0, w, h);
       const beat = Math.exp(-(now - g.pulseAt) / 380);
-      const r = Math.min(w, h) * (0.16 + 0.08 * beat);
+      const r = Math.max(1, Math.min(w, h) * (0.16 + 0.08 * beat));
       const glow = c.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, r);
       glow.addColorStop(0, `rgba(255,70,110,${(0.06 + 0.4 * beat).toFixed(3)})`);
       glow.addColorStop(1, "rgba(255,70,110,0)");
-      c.globalCompositeOperation = "lighter";
       c.fillStyle = glow;
       c.fillRect(0, 0, w, h);
     }
     c.restore();
+  }
+
+  // A soft vignette, drawn once at a small size (it is only a gradient:
+  // stretched, it stays smooth).
+  vignetteImage() {
+    if (!this.vignette) {
+      const v = document.createElement("canvas");
+      v.width = 320;
+      v.height = 180;
+      const vc = v.getContext("2d");
+      const grad = vc.createRadialGradient(160, 90, 50, 160, 90, 200);
+      grad.addColorStop(0, "rgba(6,4,14,0)");
+      grad.addColorStop(1, "rgba(6,4,14,0.85)");
+      vc.fillStyle = grad;
+      vc.fillRect(0, 0, 320, 180);
+      this.vignette = v;
+    }
+    return this.vignette;
   }
 
   // The question asked to the player at the climax of the trailer, written
@@ -1314,6 +1358,21 @@ export class World {
     for (const m of this.mobs) this.addEffect({ kind: "pillar", at: () => this.project(m.x + 0.5 * m.scale, m.y + 0.5 * m.scale, 0), color: "#b8f36b", dur: 900 });
   }
 
+  // One more creature (with its magic pillar), without touching the others.
+  // at: [ds, dd] on the stage of the scene.
+  addMob(m, at) {
+    const [x, y] = stageSD(at);
+    const mob = { ...m, x, y, scale: m.scale || 1, born: this.now(), hurt: 0, dying: 0 };
+    this.mobs.push(mob);
+    this.addEffect({ kind: "pillar", at: () => this.project(mob.x + 0.5 * mob.scale, mob.y + 0.5 * mob.scale, 0), color: "#b8f36b", dur: 700 });
+    return mob;
+  }
+
+  // A point of the stage of the scene ([ds, dd]) in world coordinates.
+  stagePoint(at) {
+    return stageSD(at);
+  }
+
   mobTop(id) {
     return () => {
       const m = this.mobs.find((x) => x.id === id);
@@ -1687,8 +1746,23 @@ export class World {
   }
 
   // ------------------------------------------------------------- drawing
+  // One frame. Whatever happens in it (a drawing error on an unusual
+  // browser…), the next frame is always asked for: the world never freezes.
   loop(frame) {
-    const real = Math.min(250, Math.max(0, frame - this.lastFrame));
+    requestAnimationFrame((t) => this.loop(t));
+    try {
+      this.frame(frame);
+    } catch (err) {
+      // Kept for diagnosis (window.pycraft.world.quality.lastError); the
+      // world goes on with the next frame.
+      this.quality.lastError = String(err && err.stack ? err.stack : err);
+    }
+  }
+
+  frame(frame) {
+    const measured = Math.max(0, frame - this.lastFrame);
+    this.govern(frame, measured);
+    const real = Math.min(250, measured);
     this.lastFrame = frame;
     if (!this.paused) this.time += real;
     const now = this.time;
@@ -1741,7 +1815,6 @@ export class World {
     if (this.cinematic) this.cinematic.update();
     this.spawnAmbient(now);
     this.draw(now);
-    requestAnimationFrame((t) => this.loop(t));
   }
 
   spawnAmbient(now) {
@@ -1812,7 +1885,8 @@ export class World {
     const left = [P(rx, ry + rd, z + h), P(rx + rw, ry + rd, z + h), P(rx + rw, ry + rd, z), P(rx, ry + rd, z)];
     const right = [P(rx + rw, ry, z + h), P(rx + rw, ry + rd, z + h), P(rx + rw, ry + rd, z), P(rx + rw, ry, z)];
     const top = [P(rx, ry, z + h), P(rx + rw, ry, z + h), P(rx + rw, ry + rd, z + h), P(rx, ry + rd, z + h)];
-    if (tex) {
+    // (on a slow machine, plain faces: the small textures cost the most)
+    if (tex && !this.quality.low) {
       seed = seed ?? x * 13.1 + y * 7.7 + z * 3.3;
       this.texturedFace(left, shade(color, 0.66), tex, seed + 1);
       this.texturedFace(right, shade(color, 0.82), tex, seed + 2);
@@ -2057,50 +2131,103 @@ export class World {
   // canvas. The isometric projection is just a scale + a translation, so
   // each frame only has to draw that image at the right place: the ground
   // stays textured and stable even while the camera moves or shakes.
+  // The ground is drawn from a cached image (see renderGroundCache): one per
+  // theme, rotation and resolution; the last ones used are kept, so coming
+  // back to a place (or each place of the trailer, rendered in advance) costs
+  // nothing.
   drawGround() {
     // Resolution of the cached image: just enough for the current zoom and
-    // screen density (2 to 4), so it stays sharp without using too much memory.
-    const dpr = window.devicePixelRatio || 1;
-    // The resolution only goes up (never down): zooming in and out around a
-    // threshold used to re-render the ground again and again (a visible pop).
-    const want = Math.min(4, Math.max(2, Math.ceil(this.cam.k * this.zoom * dpr)));
+    // the pixels drawn (2 to 4), so it stays sharp without using too much
+    // memory.
+    const pr = this.pixelRatio();
+    const want = Math.min(this.groundMaxK, Math.max(2, Math.ceil(this.cam.k * this.zoom * pr)));
     const base = `${this.rot}|${this.themeName}`;
     if (this.groundBase !== base) {
       this.groundBase = base;
       this.groundK = want;
     }
-    this.groundK = Math.max(this.groundK, want);
-    const K0 = this.groundK;
-    const pad = 12;
-    const key = `${base}|${K0}`;
-    if (key !== this.groundKey || !this.groundReady) {
-      const cache = this.groundCache;
-      const gw = Math.ceil((W + D) * (TW / 2) * K0 + pad * 2);
-      const gh = Math.ceil(((W + D) * (TH / 2) + (this.theme.coeur ? 5.5 : 3) * BH) * K0 + pad * 2);
-      cache.width = gw;
-      cache.height = gh;
-      const cctx = cache.getContext("2d");
-      cctx.clearRect(0, 0, gw, gh);
-      this.groundOrigin = [D * (TW / 2) * K0 + pad, 0.6 * BH * K0 + pad];
-      const main = this.ctx;
-      this.ctx = cctx;
-      this.fixedOrigin = [this.groundOrigin[0], this.groundOrigin[1], K0];
-      try {
-        this.renderGround(true);
-      } finally {
-        this.fixedOrigin = null;
-        this.ctx = main;
-      }
-      this.groundKey = key;
-      this.groundReady = true;
+    // The resolution only goes up (never down): zooming in and out around a
+    // threshold used to re-render the ground again and again (a visible pop).
+    this.groundK = Math.min(this.groundMaxK, Math.max(this.groundK, want));
+    // An image already drawn at a higher resolution will do (no new render).
+    for (const e of this.groundCaches.values()) {
+      if (e.theme === this.themeName && e.rot === this.rot && e.K > this.groundK) this.groundK = e.K;
     }
+    const entry = this.groundEntry(this.themeName, this.rot, this.groundK);
     const [ox, oy, k] = this.origin();
-    const scale = k / K0;
+    const scale = k / entry.K;
     const c = this.ctx;
     c.imageSmoothingEnabled = true;
     c.imageSmoothingQuality = "high";
-    c.drawImage(this.groundCache, ox - this.groundOrigin[0] * scale, oy - this.groundOrigin[1] * scale,
-      this.groundCache.width * scale, this.groundCache.height * scale);
+    c.drawImage(entry.canvas, ox - entry.origin[0] * scale, oy - entry.origin[1] * scale,
+      entry.canvas.width * scale, entry.canvas.height * scale);
+  }
+
+  groundEntry(themeName, rot, K) {
+    const key = `${themeName}|${rot}|${K}`;
+    let entry = this.groundCaches.get(key);
+    if (entry) {
+      // Most recently used: last in the map.
+      this.groundCaches.delete(key);
+    } else {
+      entry = this.renderGroundCache(themeName, rot, K);
+    }
+    this.groundCaches.set(key, entry);
+    this.trimGround();
+    return entry;
+  }
+
+  trimGround() {
+    while (this.groundCaches.size > this.groundKeep) {
+      const [oldest, entry] = this.groundCaches.entries().next().value;
+      entry.canvas.width = 0;
+      entry.canvas.height = 0;
+      this.groundCaches.delete(oldest);
+    }
+  }
+
+  renderGroundCache(themeName, rot, K0) {
+    const theme = THEMES[themeName] || this.theme;
+    const pad = 12;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.ceil((W + D) * (TW / 2) * K0 + pad * 2);
+    canvas.height = Math.ceil(((W + D) * (TH / 2) + (theme.coeur ? 5.5 : 3) * BH) * K0 + pad * 2);
+    const origin = [D * (TW / 2) * K0 + pad, 0.6 * BH * K0 + pad];
+    const saved = [this.ctx, this.theme, this.themeName, this.rot];
+    this.ctx = canvas.getContext("2d");
+    this.theme = theme;
+    this.themeName = themeName;
+    this.rot = rot;
+    this.fixedOrigin = [origin[0], origin[1], K0];
+    try {
+      this.renderGround(true);
+    } finally {
+      this.fixedOrigin = null;
+      [this.ctx, this.theme, this.themeName, this.rot] = saved;
+    }
+    // (this frame is slow because of it: not a sign of a slow machine)
+    this.quality.hitch = true;
+    return { canvas, origin, K: K0, theme: themeName, rot };
+  }
+
+  // Renders in advance the ground of the given themes (one per moment of
+  // idle time), so that a cinematic jumping from place to place never
+  // stops to draw them. Returns a promise, resolved when all are ready.
+  prewarmGround(themes, K) {
+    const list = themes.filter((name, i) => themes.indexOf(name) === i && THEMES[name]);
+    this.groundKeep = Math.max(this.groundKeep, list.length + 2);
+    return new Promise((resolve) => {
+      const next = () => {
+        const name = list.shift();
+        if (!name) {
+          resolve();
+          return;
+        }
+        this.groundEntry(name, this.rot, K);
+        setTimeout(next, 20);
+      };
+      setTimeout(next, 20);
+    });
   }
 
   renderGround(detailed) {

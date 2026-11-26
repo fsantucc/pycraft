@@ -193,7 +193,8 @@ export class Particles {
       const t = (now - p.t0) / p.life;
       const fade = p.fadeIn ? Math.min(1, t * 4) * (1 - t) * 1.6 : 1 - t * t;
       c.globalAlpha = Math.max(0, Math.min(1, fade));
-      if (p.glow) {
+      // (a blurred glow is costly: skipped on slow machines)
+      if (p.glow && !this.low) {
         c.shadowColor = p.color;
         c.shadowBlur = 8;
       }

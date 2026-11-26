@@ -14,6 +14,8 @@ import { TRAILER_KEY, Trailer } from "./trailer.js";
 import { reactionState } from "./reactions.js";
 import { TraceModel, describe } from "./trace.js";
 import { api, el, esc, md, pushToast, showValue, toast } from "./util.js";
+
+const SAVE_KEY = "pycraft.save";
 import { World } from "./world.js";
 
 const $ = (id) => document.getElementById(id);
@@ -78,6 +80,7 @@ class App {
       }
     }
     await this.refreshProgress();
+    this.rememberSave();
     const remembered = localStorage.getItem("pycraft.level");
     // The organizer may have chosen where this participant starts (admin
     // panel): the first open level from there.
@@ -110,6 +113,22 @@ class App {
     if (!localStorage.getItem("pycraft.welcomed")) {
       localStorage.setItem("pycraft.welcomed", "1");
       this.showWelcome();
+    }
+  }
+
+  // What the browser remembers of a game (trailer seen, welcome shown, last
+  // level) belongs to one save. Another save (new file, reset, new
+  // participant) is a new player: the browser forgets it all. keep: the
+  // save changed but it is the same player (an admin restore).
+  rememberSave({ keep = false } = {}) {
+    const id = String(this.progress.save_id || "");
+    try {
+      if (localStorage.getItem(SAVE_KEY) !== id && !keep) {
+        for (const key of ["pycraft.level", "pycraft.welcomed", TRAILER_KEY]) localStorage.removeItem(key);
+      }
+      localStorage.setItem(SAVE_KEY, id);
+    } catch {
+      // (storage refused: the game still works, it just remembers nothing)
     }
   }
 

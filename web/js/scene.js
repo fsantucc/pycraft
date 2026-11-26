@@ -47,6 +47,36 @@ export const SKINS = {
 
 export const SKIN_NAMES = Object.keys(SKINS);
 
+// A hat, a helmet or hair wraps the head: as one box crossing the head, it
+// had no clear drawing order with it — from some sides the head was drawn
+// over its helmet. So a box that crosses the head is cut into plates lying
+// against the faces of the head (top, back, sides, front above the brow,
+// below the chin): each one is clearly in front of or behind the head, from
+// every side. Below the brow the front stays open (the face).
+export function wrapHead(head, add, brow) {
+  return (x, y, z, w, d, h, c, role) => {
+    const b = { x0: x, x1: x + w, y0: y, y1: y + d, z0: z, z1: z + h };
+    const crosses = b.x0 < head.x1 && b.x1 > head.x0 && b.y0 < head.y1 && b.y1 > head.y0 && b.z0 < head.z1 && b.z1 > head.z0;
+    if (!crosses) {
+      add(x, y, z, w, d, h, c, role);
+      return;
+    }
+    const box = (x0, x1, y0, y1, z0, z1) => {
+      if (x1 - x0 > 1e-4 && y1 - y0 > 1e-4 && z1 - z0 > 1e-4) add(x0, y0, z0, x1 - x0, y1 - y0, z1 - z0, c, role);
+    };
+    const z0 = Math.max(b.z0, head.z0);
+    const z1 = Math.min(b.z1, head.z1);
+    const ya = Math.max(b.y0, head.y0);
+    const yb = Math.min(b.y1, head.y1);
+    box(b.x0, b.x1, b.y0, b.y1, head.z1, b.z1);
+    box(b.x0, b.x1, b.y0, b.y1, b.z0, head.z0);
+    box(b.x0, b.x1, b.y0, head.y0, z0, z1);
+    box(b.x0, b.x1, head.y1, b.y1, Math.max(z0, brow), z1);
+    box(b.x0, head.x0, ya, yb, z0, z1);
+    box(head.x1, b.x1, ya, yb, z0, z1);
+  };
+}
+
 function hatParts(hat, hx, hz, add) {
   const c = hat.c;
   const top = hz + 0.5;
@@ -65,12 +95,12 @@ function hatParts(hat, hx, hz, add) {
       break;
     case "helmet":
       add(hx - 0.03, 0.24, hz + 0.28, 0.56, 0.54, 0.3, c, "hat");
-      add(hx + 0.22, 0.74, hz + 0.1, 0.06, 0.06, 0.36, shade(c, 0.8), "hat");
+      add(hx + 0.22, 0.811, hz + 0.12, 0.06, 0.03, 0.36, shade(c, 0.8), "hat");
       add(hx + 0.18, 0.3, top + 0.08, 0.14, 0.4, 0.1, "#a8322a", "hat");
       break;
     case "miner":
       add(hx - 0.03, 0.24, hz + 0.34, 0.56, 0.54, 0.24, c, "hat");
-      add(hx + 0.18, 0.775, hz + 0.4, 0.14, 0.03, 0.12, "#fff6b0", "light");
+      add(hx + 0.18, 0.781, hz + 0.4, 0.14, 0.03, 0.12, "#fff6b0", "light");
       break;
     case "hardhat":
       add(hx - 0.03, 0.22, hz + 0.4, 0.56, 0.62, 0.08, c, "hat");
@@ -84,12 +114,12 @@ function hatParts(hat, hx, hz, add) {
       break;
     case "circlet":
       add(hx - 0.01, 0.26, hz + 0.42, 0.52, 0.5, 0.06, c, "hat");
-      add(hx + 0.21, 0.751, hz + 0.46, 0.08, 0.02, 0.08, "#5ee6e0", "hat");
+      add(hx + 0.21, 0.761, hz + 0.43, 0.08, 0.02, 0.06, "#5ee6e0", "hat");
       break;
     case "goggles":
       add(hx - 0.01, 0.26, hz + 0.36, 0.52, 0.5, 0.06, "#3a2a1a", "hat");
-      add(hx + 0.06, 0.755, hz + 0.33, 0.16, 0.03, 0.12, c, "hat");
-      add(hx + 0.28, 0.755, hz + 0.33, 0.16, 0.03, 0.12, c, "hat");
+      add(hx + 0.06, 0.761, hz + 0.33, 0.16, 0.03, 0.12, c, "hat");
+      add(hx + 0.28, 0.761, hz + 0.33, 0.16, 0.03, 0.12, c, "hat");
       break;
     case "wizard":
       add(hx - 0.1, 0.16, top - 0.04, 0.7, 0.68, 0.06, c, "hat");
@@ -324,11 +354,16 @@ export function npcParts(skinName, pose = "idle", t = 0, seed = 0) {
   const hz = bz + 0.75 + slump;
   const hx = 0.25 + look;
   add(hx, 0.27, hz, 0.5, 0.48, 0.48, s.skin, "head");
+  const head = { x0: hx, x1: hx + 0.5, y0: 0.27, y1: 0.75, z0: hz, z1: hz + 0.48 };
+  // (the brow: above it a band may cover the front; a hood leaves the face
+  // open)
+  const hood = s.hat && s.hat.type === "hood";
+  const around = wrapHead(head, add, hz + (hood ? 0.48 : 0.36));
   if (s.hair && (!s.hat || ["none", "bun", "headband", "bandana", "goggles", "circlet"].includes(s.hat.type))) {
-    add(hx - 0.01, 0.26, hz + 0.38, 0.52, 0.5, 0.12, s.hair, "head");
-    add(hx - 0.01, 0.26, hz + 0.18, 0.52, 0.12, 0.3, s.hair, "head");
+    around(hx - 0.01, 0.26, hz + 0.38, 0.52, 0.5, 0.12, s.hair, "head");
+    around(hx - 0.01, 0.26, hz + 0.18, 0.52, 0.12, 0.3, s.hair, "head");
   } else if (s.hair) {
-    add(hx - 0.01, 0.26, hz + 0.2, 0.52, 0.1, 0.25, s.hair, "head");
+    around(hx - 0.01, 0.26, hz + 0.2, 0.52, 0.1, 0.25, s.hair, "head");
   }
   const sad = pose === "sad";
   add(hx + 0.07, 0.752, hz + 0.24, 0.11, 0.01, sad ? 0.05 : 0.09, "#ffffff", "eye");
@@ -348,7 +383,7 @@ export function npcParts(skinName, pose = "idle", t = 0, seed = 0) {
   } else {
     add(hx + 0.17, 0.753, hz + 0.08 - mouth, 0.16, 0.01, mouth, "#5a1a1a", "mouth");
   }
-  if (s.hat) hatParts(s.hat, hx, hz, add);
+  if (s.hat) hatParts(s.hat, hx, hz, around);
   // Arms. Each returns the box of its fist, where an item is held.
   const arm = (side, mode) => {
     const x = side === "L" ? 0.02 : 0.8;

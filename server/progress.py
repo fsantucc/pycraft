@@ -32,6 +32,15 @@ class ProgressStore:
         # file name and the time, for the admin panel.
         self.set_aside: dict[str, Any] | None = None
         self.data = self._load()
+        # The identity of the save is its creation time. An older save
+        # without one gets it now, once and for all.
+        if "created" not in self.data:
+            self.data["created"] = time.time()
+            if self.path.exists():
+                try:
+                    self.save()
+                except OSError:
+                    pass
 
     # ------------------------------------------------------------ files
     def _load(self) -> dict[str, Any]:
@@ -231,6 +240,10 @@ class ProgressStore:
                 "reviewing": state.get("reviewing", False),
             }
         return {
+            # Which save this is: the browser forgets what it remembers of
+            # a game (trailer seen, welcome shown, last level) when the save
+            # changes — a new save is a new player.
+            "save_id": str(self.data.get("created", "")),
             "xp": xp, "player_level": player_level,
             "level_floor": floor_xp, "level_next": next_xp,
             "levels": levels, "rewards": self.data["rewards"],

@@ -339,42 +339,67 @@ def test_first_launch_trailer(server_url: str) -> None:
         page.keyboard.press("Escape")
         assert page.locator(".trailer").count() == 1  # not skipped
         assert page.locator(".cine-controls .close").count() == 0
-        # A memory: just the name of the world, no description.
+        # The opening: the first world, the title.
         assert page.locator(".tr-world").inner_text().upper().startswith(
             "ACTE I ·")
-        assert page.locator(".tr-map.show").count() == 0
+        assert "PyCraft" in page.locator(".tr-title").inner_text()
         assert page.evaluate("window.pycraft.world.stage.npcs.length") > 0
         page.keyboard.press("ArrowRight")
         page.wait_for_timeout(300)
         assert page.evaluate("window.pycraft.world.cinematic.index") == 1
-        # Three phases: the journey (one memory per world of acts I-III),
-        # the approach (act IV), then the silence and the Heart of the
-        # World, with the question asked to the player.
         labels: Any = page.evaluate(
             "window.pycraft.world.cinematic.steps.map(s => s.label)")
-        kinds = [label.split()[0] for label in labels]
-        assert kinds == (["souvenir"] * 10 + ["approche"] * 2
-                         + ["silence", "sleeping", "seals", "awakening",
-                            "burst", "défi", "fin"])
+        assert labels == ["ouverture", "fonctions", "boucles", "objets",
+                          "boss", "erreurs", "generateurs", "progression",
+                          "secrets", "silence", "coeur", "defi", "fin"]
+        total = page.evaluate("window.pycraft.world.cinematic.steps"
+                              ".reduce((s, x) => s + x.dur, 0)")
+        assert total <= 30000, total
+        # Each shot rebuilt from scratch: what it shows.
         seen: Any = page.evaluate("""() => {
             const w = window.pycraft.world;
+            const q = (sel) => document.querySelector(sel);
             const out = [];
-            for (let i = 0; w.cinematic && i < 60; i += 1) {
-                out.push([w.themeName, w.grade && w.grade.kind,
-                          !!w.challenge]);
-                w.cinematic.next();
+            for (let i = 0; w.cinematic && i < 30; i += 1) {
+                const c = w.cinematic;
+                c.update();
+                // (jump to the end of the step's cues: what it shows)
+                c.t0 -= c.steps[c.index].dur - 1;
+                c.fired = 0;
+                const step = c.steps[c.index];
+                step.cues.forEach((cue) => cue[1](c));
+                const h = w.heart || {};
+                out.push({ label: step.label, theme: w.themeName,
+                    code: q('.tr-code').classList.contains('show'),
+                    kicker: q('.tr-act').textContent,
+                    night: w.night.to, challenge: !!w.challenge,
+                    awake: h.awake, seals: h.seals,
+                    lamp: (w.stage && w.stage.props.find(
+                      (p) => p.type === 'lantern') || {}).code,
+                    mobs: w.mobs.length });
+                c.next();
             }
             return out;
         }""")
-        # (the first memory was left with ArrowRight above)
-        assert [g for _, g, _ in seen[:9]] == ["memory"] * 9
-        assert [g for _, g, _ in seen[9:11]] == ["approach"] * 2
-        assert seen[11] == ["coeur", "black", False]
-        assert [c for _, _, c in seen].count(True) == 1
-        assert [t for t, _, _ in seen[11:]] == ["coeur"] * 7
+        by = {x["label"]: x for x in seen}
+        for key in ("fonctions", "boucles", "objets", "boss", "erreurs",
+                    "generateurs"):
+            assert by[key]["code"], key  # a line of code typed
+            assert "Tu apprends" in by[key]["kicker"], key
+        assert by["fonctions"]["night"] == 1
+        assert by["fonctions"]["lamp"] == {"on": True}
+        assert by["objets"]["mobs"] == 3 and by["generateurs"]["mobs"] == 4
+        assert "secrets" in by["secrets"]["kicker"]
+        # The last level: more time, its place, three seals of four, the
+        # Heart still asleep (its awakening stays a surprise).
+        assert [by[k]["theme"] for k in ("silence", "coeur", "defi")] \
+            == ["coeur"] * 3
+        assert by["coeur"]["seals"] == 3 and by["defi"]["seals"] == 3
+        assert all(x["awake"] in (0, None) for x in seen)
+        assert [x["challenge"] for x in seen].count(True) == 1
         page.wait_for_selector(".trailer", state="detached", timeout=30000)
         assert page.evaluate(
-            "localStorage.getItem('pycraft.trailerSeen')") == "6"
+            "localStorage.getItem('pycraft.trailerSeen')") == "7"
         page.wait_for_timeout(800)
         # Then the story of the first level.
         info: Any = page.evaluate("window.pycraft.world.cinematic.info()")
@@ -393,6 +418,50 @@ def test_first_launch_trailer(server_url: str) -> None:
     assert not errors, errors
 
 
+
+def test_trailer_stays_short_on_a_slow_machine(tmp_path: Path) -> None:
+    """A slow computer (processor slowed down 4 times, sharp screen): the
+    trailer adapts its quality and still lasts about 30 seconds — it used
+    to crawl (2 images per second, nearly 2 minutes)."""
+    playwright = pytest.importorskip("playwright.sync_api")
+    chrome = _browser()
+    if chrome is None:
+        pytest.skip("aucun navigateur Chrome/Chromium")
+    from server.app import make_server
+    # (a save of its own: the other tests do not see this first launch)
+    httpd = make_server("127.0.0.1", 0, tmp_path / "save.json")
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    server_url = f"http://127.0.0.1:{httpd.server_address[1]}/"
+    errors: list[str] = []
+    with playwright.sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=chrome,
+                                    args=["--no-sandbox"])
+        context = browser.new_context(viewport={"width": 1440,
+                                                "height": 810},
+                                      device_scale_factor=2)
+        page = context.new_page()
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto(server_url)
+        page.wait_for_selector(".tr-start button", timeout=20000)
+        page.wait_for_timeout(2500)  # the places are drawn in advance
+        cdp = context.new_cdp_session(page)
+        cdp.send("Emulation.setCPUThrottlingRate", {"rate": 4})
+        page.evaluate("window.__t0 = performance.now()")
+        page.click(".tr-start button")
+        page.wait_for_function(
+            "!document.body.classList.contains('trailer-on')",
+            timeout=90000)
+        ms = page.evaluate("performance.now() - window.__t0")
+        quality: Any = page.evaluate("window.pycraft.world.quality")
+        cdp.send("Emulation.setCPUThrottlingRate", {"rate": 1})
+        browser.close()
+    httpd.shutdown()
+    assert ms < 38000, f"aperçu de {ms / 1000:.1f} s"
+    assert quality["changes"] >= 1, "the quality adapted to the machine"
+    assert quality["lastError"] is None, quality["lastError"]
+    assert not errors, errors
+
+
 def test_cinematic_controls(server_url: str) -> None:
     """Pause freezes the world; next / previous rebuild the step from
     scratch: one bubble, the right line, nothing fired twice."""
@@ -405,9 +474,11 @@ def test_cinematic_controls(server_url: str) -> None:
         browser = p.chromium.launch(executable_path=chrome,
                                     args=["--no-sandbox"])
         page = browser.new_page(viewport={"width": 1300, "height": 800})
+        # (this browser already knows this save: no welcome window)
         page.add_init_script(
-            "localStorage.setItem('pycraft.trailerSeen', '6');"
-            "localStorage.setItem('pycraft.welcomed', '1')")
+            "localStorage.setItem('pycraft.trailerSeen', '7');"
+            "localStorage.setItem('pycraft.welcomed', '1');"
+            f"localStorage.setItem('pycraft.save', '{_save_id(server_url)}')")
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(server_url + "?intro=0")
         page.wait_for_timeout(1500)
@@ -507,9 +578,11 @@ def test_returning_player_trailer(server_url: str) -> None:
         browser = p.chromium.launch(executable_path=chrome,
                                     args=["--no-sandbox"])
         page = browser.new_page(viewport={"width": 1300, "height": 800})
+        # This browser has already seen the trailer — of this very save.
         page.add_init_script(
             "localStorage.setItem('pycraft.trailerSeen', '6');"
-            "localStorage.setItem('pycraft.welcomed', '1')")
+            "localStorage.setItem('pycraft.welcomed', '1');"
+            f"localStorage.setItem('pycraft.save', '{_save_id(server_url)}')")
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(server_url)
         page.wait_for_timeout(1500)
@@ -528,6 +601,62 @@ def test_returning_player_trailer(server_url: str) -> None:
         page.wait_for_timeout(600)
         assert page.evaluate("window.pycraft.level.id") == level["id"]
         browser.close()
+    assert not errors, errors
+
+
+def _save_id(url: str) -> str:
+    import json
+    import urllib.request
+    with urllib.request.urlopen(url + "api/progress", timeout=10) as r:
+        return str(json.loads(r.read())["save_id"])
+
+
+def test_a_new_save_is_a_new_player(tmp_path: Path) -> None:
+    """The browser remembers a game (trailer seen, welcome shown, last
+    level) for one save only: with a new save, the game starts as the very
+    first time, even in a browser that played before."""
+    playwright = pytest.importorskip("playwright.sync_api")
+    chrome = _browser()
+    if chrome is None:
+        pytest.skip("aucun navigateur Chrome/Chromium")
+    from server.app import make_server
+    httpd = make_server("127.0.0.1", 0, tmp_path / "new.json")
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{httpd.server_address[1]}/"
+    errors: list[str] = []
+    try:
+        with playwright.sync_playwright() as p:
+            browser = p.chromium.launch(executable_path=chrome,
+                                        args=["--no-sandbox"])
+            page = browser.new_page(viewport={"width": 1300, "height": 800})
+            # What this browser remembers of an older game.
+            page.add_init_script(
+                "if (!sessionStorage.getItem('once')) {"
+                " sessionStorage.setItem('once', '1');"
+                " localStorage.setItem('pycraft.trailerSeen', '6');"
+                " localStorage.setItem('pycraft.welcomed', '1');"
+                " localStorage.setItem('pycraft.level', 'a1l3');"
+                " localStorage.setItem('pycraft.save', 'une-autre-partie'); }")
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(url)
+            page.wait_for_timeout(1500)
+            card = page.locator(".tr-start")
+            assert card.is_visible()
+            assert "Découvrir PyCraft" in card.inner_text()
+            assert "Reprendre" not in card.inner_text()
+            assert page.evaluate("localStorage.getItem('pycraft.save')") \
+                == _save_id(url)
+            assert page.evaluate("localStorage.getItem('pycraft.welcomed')"
+                                 ) is None
+            # The same save, the next time: the player is recognised.
+            page.evaluate("localStorage.setItem('pycraft.trailerSeen', '6')")
+            page.goto(url)
+            page.wait_for_timeout(1500)
+            assert "Reprendre l'aventure" in page.locator(".tr-start") \
+                .inner_text()
+            browser.close()
+    finally:
+        httpd.shutdown()
     assert not errors, errors
 
 
@@ -564,8 +693,10 @@ def test_admin_panel_for_the_workshop(admin_url: str) -> None:
         page.add_init_script(
             "if (!sessionStorage.getItem('started')) {"
             " sessionStorage.setItem('started', '1');"
-            " localStorage.setItem('pycraft.trailerSeen', '6');"
-            " localStorage.setItem('pycraft.welcomed', '1'); }")
+            " localStorage.setItem('pycraft.trailerSeen', '7');"
+            " localStorage.setItem('pycraft.welcomed', '1');"
+            f" localStorage.setItem('pycraft.save', '{_save_id(admin_url)}');"
+            " }")
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.goto(admin_url + "?intro=0")
         page.wait_for_timeout(1200)

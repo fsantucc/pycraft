@@ -484,3 +484,27 @@ def test_lockout_over_http(server: tuple[str, Clock]) -> None:
              for _ in range(5)]
     assert codes == [401, 401, 401, 401, 429]
     assert call(base, "/api/admin/login", {"password": PASSWORD})[0] == 429
+
+
+def test_each_save_has_its_own_identity(tmp_path: Path) -> None:
+    """The browser uses it to forget an older game (see rememberSave)."""
+    store = ProgressStore(tmp_path / "progress.json")
+    first = store.summary()["save_id"]
+    assert first
+    with store.lock:
+        store.save()
+    assert ProgressStore(tmp_path / "progress.json").summary()["save_id"] \
+        == first, "the same save keeps its identity"
+    with store.lock:
+        store.clear()
+    assert store.summary()["save_id"] != first, "a new participant"
+    store.reset()
+    assert store.summary()["save_id"] not in ("", first)
+
+
+def test_an_older_save_gets_an_identity_once(tmp_path: Path) -> None:
+    path = tmp_path / "progress.json"
+    path.write_text('{"version": 1, "xp": 0, "levels": {}, "rewards": []}',
+                    encoding="utf-8")
+    first = ProgressStore(path).summary()["save_id"]
+    assert first and ProgressStore(path).summary()["save_id"] == first

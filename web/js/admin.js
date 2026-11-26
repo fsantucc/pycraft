@@ -379,6 +379,9 @@ export class AdminPanel {
   async applied(res, opts = {}) {
     const { app } = this;
     await app.refreshProgress();
+    // (a restored or imported save: same player, the browser keeps its
+    // memory of the game)
+    app.rememberSave({ keep: true });
     const status = (id) => (app.progress.levels[id] || {}).status;
     let target = res.open && !opts.stay ? res.open : null;
     if (opts.reopen) target = app.level.id;
@@ -415,7 +418,8 @@ export class AdminPanel {
     if (!res) return;
     // The browser side of the game starts again too: the newcomer gets the
     // real first launch (or none of it, if the introduction is skipped).
-    for (const key of ["pycraft.level", "pycraft.welcomed", TRAILER_KEY]) localStorage.removeItem(key);
+    await this.app.refreshProgress();
+    this.app.rememberSave();
     if (!intro) {
       localStorage.setItem(TRAILER_KEY, TRAILER_VERSION);
       localStorage.setItem("pycraft.welcomed", "1");

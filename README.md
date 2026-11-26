@@ -152,26 +152,40 @@ ni événement joué deux fois. La pause fige vraiment le monde (animations, bul
 sons). Une cinématique attend aussi, en pause, quand une fenêtre ou la visite guidée la
 recouvre.
 
-**Aperçu (à chaque lancement)** : le voyage vers le Cœur du Monde, en trois phases. La
-première fois, la carte de départ propose « Découvrir PyCraft » et l'aperçu ne peut pas
-être fermé. Ensuite, elle accueille le joueur (« Bon retour, aventurier ! »), montre sa
-partie (niveau, monde, XP, niveaux terminés) et propose « Reprendre l'aventure » ; l'aperçu
-se ferme alors à tout moment avec ✕, et la partie reprend là où elle en était.
+**Aperçu (à chaque lancement)** : 30 secondes au plus (29,6 s), des plans courts, une
+image forte chacun, presque pas de texte. La première fois, la carte de départ propose
+« Découvrir PyCraft » et l'aperçu ne peut pas être fermé. Ensuite, elle accueille le
+joueur (« Bon retour, aventurier ! »), montre sa partie (niveau, monde, XP, niveaux
+terminés) et propose « Reprendre l'aventure » ; l'aperçu se ferme alors à tout moment
+avec ✕. ⏸ ⏮ ⏭ : pause, plan précédent / suivant.
 
-1. *Le voyage* (actes I, II et III) : une seule image par monde, comme un souvenir
-   fugace (flash de lumière chaude, flou qui se dissipe, caméra qui glisse), de plus en
-   plus rapide ; seul le nom du monde s'affiche.
-2. *L'approche* (acte IV) : le rythme ralentit, la lumière devient froide et sombre, un
-   bourdon et un battement de cœur lointain qui se rapproche.
-3. *Le défi ultime* : rupture — noir complet, silence, un cœur qui bat — puis le Cœur du
-   Monde (endormi, ses quatre sceaux, son éveil, l'explosion de lumière) et la question
-   « Mais seras-tu capable d'atteindre Le Cœur du Monde ? ».
+1. *Ouverture* (2,2 s) : le titre au-dessus du premier village.
+2. *Ce qu'on apprend* (6 plans, ~2 s chacun) : une ligne de code tapée à l'écran et son
+   effet sur le monde — une fonction allume la lanterne dans la nuit et fait fuir le
+   zombie, une boucle élève une tour étage par étage, une classe fait apparaître un
+   troupeau, un boss tombe, une exception explose, un générateur lâche ses vagues.
+3. *La progression* (2,4 s) : 4 actes · 13 mondes · 43 niveaux qui défilent, le chemin
+   du voyage qui se remplit, des XP et des récompenses.
+4. *Les secrets* (2 s) : une bibliothèque la nuit, un livre qui brille, un « 42 » qui
+   grésille… sans rien dévoiler.
+5. *Le dernier niveau* (8,1 s, le plus long) : le noir, un cœur qui bat ; puis le ciel
+   d'aurore, les îles flottantes et le Cœur endormi ; trois de ses quatre sceaux
+   s'allument (le quatrième reste éteint) ; la question « Mais seras-tu capable
+   d'atteindre Le Cœur du Monde ? ». Son éveil reste une surprise pour la fin du jeu.
+6. *À toi de jouer !* (1,6 s) : le logo, et le chemin qui indique « Tu es ici ».
 
-En bas de l'écran, le chemin du voyage montre les 13 mondes acte par acte jusqu'au Cœur ;
-à la fin, il indique « Tu es ici » sur le monde où en est le joueur et le Cœur verrouillé
-🔒 au bout. Rien de
-l'histoire ni des exercices n'est dévoilé. Le bouton 🎬 la rejoue pendant la partie.
+Chaque plan affiche son monde en haut à gauche ; en bas, le chemin du voyage montre les
+13 mondes acte par acte jusqu'au Cœur. Le bouton 🎬 le rejoue pendant la partie.
 (Pour les tests automatiques, `?intro=0` dans l'adresse saute l'aperçu.)
+
+**Ordinateurs lents** : le sol de chaque lieu de l'aperçu est dessiné à l'avance pendant
+la carte de départ (les changements de plan ne figent plus l'image), les effets de
+couleur n'utilisent plus de modes de fusion ni de filtres (très lents, voire faux, sur
+certaines cartes graphiques), et la qualité s'adapte : si les images tombent sous ~22 par
+seconde, le monde est dessiné avec moins de pixels, puis sans les petites textures ni
+les halos. Une erreur de dessin ne fige plus jamais le monde (l'image suivante est
+toujours demandée). `?quality=high` garde la qualité maximale, `?quality=low` part de la
+plus légère.
 
 **Cinématique d'histoire** : la première fois qu'on ouvre un niveau, les personnages
 racontent l'histoire ; tant qu'ils n'ont pas fini, « Comprendre → » et les autres étapes
@@ -330,7 +344,7 @@ d'audit et la liste blanche s'appliquent.
 ## Tests
 
 ```
-python3 -m pytest -q tests        # 616 tests (dont le navigateur si Chrome est présent)
+python3 -m pytest -q tests        # 620 tests (dont le navigateur si Chrome est présent)
 node --test tests/js/*.test.mjs  # 28 tests JavaScript (aussi lancés par pytest)
 python3 -m mypy server run.py     # aucune erreur
 ```

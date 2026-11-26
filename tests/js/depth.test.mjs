@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { orderBoxes, pushApart } from "../../web/js/depth.js";
-import { npcParts, propParts } from "../../web/js/scene.js";
+import { SKINS, npcParts, propParts } from "../../web/js/scene.js";
 
 const ROTATIONS = [0, 1, 2, 3].map((rot) => (x, y) => {
   let dx = x - 12;
@@ -46,16 +46,25 @@ test("push apart: the smallest partial overlap decides, nested boxes do not", ()
   assert.equal(pushApart(ext(box(0.2, 0.2, 1.3, 0.6, 0.6, 0.5)), ext(box(0.15, 0.15, 1.25, 0.7, 0.7, 0.6))), 0);
 });
 
-test("characters keep the order of their model: the guard's face shows under his helmet", () => {
-  // The open helmet wraps the top of the head: pushing them apart (as for
-  // solid scenery) would cover the face. From the front, the head is drawn
-  // after the helmet.
-  const { parts } = npcParts("guard", "idle", 0, 0);
-  const placed = parts.map((p, i) => ({ ...p, x: p.x + 10, y: p.y + 10, i }));
-  const head = placed.findIndex((p) => p.role === "head");
-  const hat = placed.findIndex((p) => p.role === "hat");
-  for (const r of [0, 3]) {
-    const order = orderBoxes(placed, ROTATIONS[r]).map((b) => b.i);
-    assert.ok(order.indexOf(hat) < order.indexOf(head), `rotation ${r}`);
+test("no hat, helmet or hair crosses a head: drawn in front of it from every side", () => {
+  const cross = (a, b) => a.x < b.x + b.w - 1e-6 && b.x < a.x + a.w - 1e-6 && a.y < b.y + b.d - 1e-6
+    && b.y < a.y + a.d - 1e-6 && a.z < b.z + b.h - 1e-6 && b.z < a.z + a.h - 1e-6;
+  for (const skin of Object.keys(SKINS)) {
+    for (const pose of ["idle", "talk", "cheer", "sad"]) {
+      const { parts } = npcParts(skin, pose, 0, 0);
+      const head = parts.find((p) => p.role === "head");
+      for (const p of parts) {
+        if (p === head || !["hat", "head"].includes(p.role)) continue;
+        assert.ok(!cross(p, head), `${skin} ${pose}: ${p.role} crosses the head`);
+      }
+      // From each side, the helmet's top plate is drawn after the head.
+      const placed = parts.map((p, i) => ({ ...p, x: p.x + 10, y: p.y + 10, i }));
+      const hi = parts.indexOf(head);
+      const tops = placed.filter((p) => p.role === "hat" && Math.abs(p.z - head.z - head.h) < 1e-6);
+      for (const rotate of ROTATIONS) {
+        const order = orderBoxes(placed, rotate).map((b) => b.i);
+        for (const t of tops) assert.ok(order.indexOf(t.i) > order.indexOf(hi), `${skin}: hat top behind the head`);
+      }
+    }
   }
 });
