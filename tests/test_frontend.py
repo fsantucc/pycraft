@@ -1052,3 +1052,46 @@ def test_difficult_words_are_explained(server_url: str) -> None:
         assert page.locator(".term-pop").count() == 0
         browser.close()
     assert not errors, errors
+
+
+def test_comprendre_runs_the_demo_and_the_course_follows(
+        server_url: str) -> None:
+    """The story only tells; « Comprendre » runs the program of the level
+    (every time), its code visible, and the passage of the course that
+    explains the line being run lights up."""
+    playwright = pytest.importorskip("playwright.sync_api")
+    chrome = _browser()
+    if chrome is None:
+        pytest.skip("aucun navigateur Chrome/Chromium")
+    with playwright.sync_playwright() as p:
+        browser, page, errors = _open_app(p, server_url, chrome)
+        page.evaluate("""async () => { const a = window.pycraft;
+            a.progress.levels.a1l3.status = 'available';
+            await a.openLevel('a1l3'); }""")
+        page.evaluate(SKIP_CINEMATIC)
+        page.wait_for_function("!window.pycraft.world.cinematic",
+                               timeout=30000)
+        page.wait_for_timeout(1200)
+        assert page.evaluate("window.pycraft.model") is None, \
+            "the story runs nothing"
+        assert page.is_visible("#editor-veil")
+        page.evaluate("window.pycraft.goStep('explain')")
+        page.wait_for_function("window.pycraft.model", timeout=20000)
+        assert not page.is_visible("#editor-veil"), "the code is shown"
+        page.evaluate("window.pycraft.pause()")
+        lit = {}
+        for i in range(page.evaluate("window.pycraft.model.count")):
+            page.evaluate(f"window.pycraft.goto({i}, false)")
+            line = page.evaluate("(window.pycraft.model.steps["
+                                 f"{i}] || {{}}).line")
+            f = page.locator("#tab-lesson .following")
+            lit[line] = f.inner_text()[:25] if f.count() else None
+        assert lit[2].startswith('input("Question')
+        assert lit[6].startswith("Les opérateurs")
+        # Back to « Comprendre » later: it plays again.
+        page.evaluate("window.pycraft.goStep('demo')")
+        page.evaluate("window.pycraft.goStep('explain')")
+        page.wait_for_timeout(500)
+        assert page.evaluate("window.pycraft.playing")
+        browser.close()
+    assert not errors, errors

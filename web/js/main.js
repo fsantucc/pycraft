@@ -502,7 +502,7 @@ class App {
   replayStory() {
     if (this.world.cinematic) return;
     this.clearRun();
-    this.playStory({ onEnd: () => { if (this.step === "story") this.runDemo(true); } });
+    this.playStory();
   }
 
   nextLevelId(levelId) {
@@ -518,7 +518,8 @@ class App {
     this.step = step;
     const missionSide = ["mission", "quiz", "mastery"].includes(step);
     this.setMode(missionSide ? "mission" : "demo");
-    const veiled = ["story", "explain"].includes(step);
+    // The code stays hidden during the story; « Comprendre » shows it.
+    const veiled = step === "story";
     $("editor-veil").classList.toggle("hidden", !veiled);
     $("btn-check").classList.toggle("hidden", step !== "mission");
     try {
@@ -535,9 +536,10 @@ class App {
     this.lesson.render();
     document.querySelector('.tab[data-tab="lesson"]').click();
     if (step === "story") {
-      // First the characters tell the story (a cinematic), then the
-      // demonstration plays. The first time, the lesson waits for the end of
-      // the cinematic (which can be paused, rewound or advanced step by step).
+      // The characters tell the story (a cinematic). The program itself
+      // starts at « Comprendre ». The first time, the lesson waits for the
+      // end of the cinematic (which can be paused, rewound or advanced step
+      // by step).
       const levelId = this.level.id;
       if (this.introPlayedFor !== levelId) {
         this.introPlayedFor = levelId;
@@ -547,17 +549,17 @@ class App {
         const playing = this.playStory({
           blocking: firstTime,
           onEnd: () => {
-            if (this.step === "story" && this.level.id === levelId) {
-              this.lesson.render();
-              this.runDemo(true);
-            }
+            if (this.step === "story" && this.level.id === levelId) this.lesson.render();
           },
         });
-        if (!playing) this.runDemo(true);
+        if (!playing) this.clearRun();
       } else {
-        this.runDemo(true);
+        this.clearRun();
       }
     }
+    // « Comprendre » (every time): the demonstration plays by itself, the
+    // code visible, the course following the line being run.
+    else if (step === "explain") this.runDemo(true);
     else if (step === "demo") this.runDemo(false);
     else if (step === "mission" && !this.model) this.clearRun();
   }
@@ -750,8 +752,7 @@ class App {
   // ------------------------------------------------------------ execution
   runDemo(autoplay) {
     if (this.mode !== "demo") this.setMode("demo");
-    const veiled = this.step === "story" || this.step === "explain";
-    this.execute(veiled ? { ...this.level.demo } : this.editor.getFiles(), "main.py", autoplay);
+    this.execute(this.step === "story" ? { ...this.level.demo } : this.editor.getFiles(), "main.py", autoplay);
   }
 
   runCurrent() {
@@ -924,6 +925,11 @@ class App {
       this.editor.switchTo(step.file);
     }
     this.editor.setCurrent(step ? { file: step.file, line: step.line } : null);
+    // In the course: the passage that explains this line lights up.
+    if (this.step === "explain" && this.mode === "demo") {
+      const code = step && this.editor.files[step.file] !== undefined ? (this.editor.files[step.file].split("\n")[step.line - 1] || "") : "";
+      this.lesson.follow(step ? step.line : 0, code);
+    }
     $("tl-range").value = Math.max(0, target);
     $("tl-info").textContent = this.model.count
       ? `Étape ${target + 1}/${this.model.count}${step ? ` · ligne ${step.line}${step.file !== "main.py" ? ` (${step.file})` : ""}` : ""}`

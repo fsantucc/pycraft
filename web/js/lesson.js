@@ -4,6 +4,72 @@
 import { sound } from "./sound.js";
 import { api, el, esc, md, toast } from "./util.js";
 
+const KEYWORDS = new Set(["def", "return", "for", "while", "if", "elif", "else", "class", "try", "except", "finally", "raise",
+  "yield", "import", "from", "with", "lambda", "in", "not", "and", "or", "pass", "break", "continue", "global", "assert", "None", "True", "False", "self", "super"]);
+const OPERATORS = ["//", "**", "%", "==", "!=", ">=", "<=", "+=", "-=", "+", "-", "*", "/", "<", ">"];
+
+// What a line does, in the words a course uses for it: [the line looks
+// like…, the passage talks about…, weight].
+const CONCEPTS = [
+  [/^\s*class\s+\w+\s*\(\s*\w/, /h[ée]rit|parent|enfant|sous-classe|classe m[èe]re|fille/i, 1.6],
+  [/^\s*class\s/, /\bclasses?\b|\bplans?\b/i, 1],
+  [/def\s+__init__/, /constructeur|__init__|cr[ée]ation de l'objet|à la création/i, 1.6],
+  [/super\(\)/, /super|parent/i, 1.6],
+  [/self\._/, /prot[ée]g|priv[ée]|_\w|encapsul|de l'ext[ée]rieur/i, 1.2],
+  [/\breturn\b/, /renvoi|retourn/i, 1.6],
+  [/->\s*bool|\bTrue\b|\bFalse\b/, /bool[ée]en|vrai|faux/i, 1],
+  [/\bif\b|\belif\b|\belse\b/, /condition|\bsi\b|sinon/i, 1],
+  [/^\s*(for|while)\b/, /boucle|r[ée]p[èe]te|chaque|tant que/i, 1.2],
+  [/\btry\b|\bexcept\b/, /exception|erreur|rattrap/i, 1.6],
+  [/\braise\b/, /l[eè]ve|lance|d[ée]clench|raise/i, 1.6],
+  [/\bfinally\b/, /finally|toujours|quoi qu'il/i, 1.6],
+  [/\byield\b/, /g[ée]n[ée]rateur|yield|un par un|à la demande/i, 1.6],
+  [/^\s*(import|from)\b/, /module|import/i, 1.6],
+  [/^\s*@/, /d[ée]corateur|@/i, 1.6],
+  [/\bprint\(/, /affiche/i, 0.6],
+  [/^\s*def\s/, /fonction|m[ée]thode|d[ée]fini/i, 0.8],
+  [/\[.*\bfor\b.*\]/, /compr[ée]hension/i, 1.6],
+];
+
+// Which passage of the course (a list of { text, code }) explains a line of
+// code best. Returns its index, or -1. Exported for the tests.
+export function bestPassage(passages, line) {
+  const src = line.replace(/#.*$/, "");
+  const hasString = /(["']).*?\1/.test(src);
+  const bare = src.replace(/(["'])(?:\\.|(?!\1).)*\1/g, " ");
+  const hasNumber = /\b\d+\b/.test(bare);
+  const tokens = new Map();
+  for (const m of bare.matchAll(/[A-Za-z_][A-Za-z0-9_]*(\s*\()?/g)) {
+    const name = m[0].replace(/\s*\($/, "");
+    const weight = KEYWORDS.has(name) ? 1.5 : m[1] ? 2 : 1;
+    tokens.set(name, Math.max(tokens.get(name) || 0, weight));
+  }
+  const ops = OPERATORS.filter((op) => bare.includes(op));
+  // + between texts (they are glued) or between numbers (added).
+  const glue = /["']\s*\+|\+\s*["']/.test(src);
+  const add = !glue && /[\w)]\s*\+\s*[\w(]/.test(bare);
+  let best = -1;
+  let top = 1.5;
+  passages.forEach(({ text, code }, i) => {
+    let score = 0;
+    for (const [name, weight] of tokens) {
+      const re = new RegExp(`(^|[^A-Za-z0-9_])${name}([^A-Za-z0-9_]|$)`);
+      if (re.test(code) || (KEYWORDS.has(name) && re.test(text))) score += weight;
+    }
+    for (const op of ops) if (code.includes(op)) score += 1.5;
+    if (hasString && /["']/.test(code)) score += 0.5;
+    if (hasNumber && /\d/.test(code)) score += 0.5;
+    for (const [looks, talks, weight] of CONCEPTS) if (looks.test(src) && talks.test(text)) score += weight;
+    if (glue && /["']\s*\+\s*["']/.test(code)) score += 1;
+    if (add && /[\d)]\s*\+\s*[\w(]/.test(code)) score += 1;
+    if (score > top + 1e-9) {
+      top = score;
+      best = i;
+    }
+  });
+  return best;
+}
+
 export const STEPS = [
   { key: "story", label: "1 Découverte", short: "Histoire" },
   { key: "explain", label: "2 Explication", short: "Cours" },
@@ -143,11 +209,10 @@ export class LessonPanel {
       body.append(talk);
     }
     body.append(el("div", { class: "card" },
-      el("h4", {}, "👀 Observe le monde"),
-      el("p", {}, "Le monde au centre rejoue le programme de démonstration, instruction par instruction. Le code est encore caché : regarde d'abord ce qui apparaît, ce qui change, qui parle."),
-      el("button", { class: "tiny", disabled: !!this.app.world.cinematic, onclick: () => this.app.runDemo(true) }, "↻ Revoir l'animation"),
+      el("h4", {}, "👀 Observe la scène"),
+      el("p", {}, "Écoute les personnages et regarde le monde. Ensuite, « Comprendre » lance le programme de ce niveau : tu verras son code et ce qu'il fait, ligne par ligne."),
       level.scene && level.scene.npcs && level.scene.npcs.length
-        ? el("button", { class: "tiny", style: "margin-left:6px", disabled: !!this.app.world.cinematic, onclick: () => this.app.replayStory() }, "💬 Revoir la scène")
+        ? el("button", { class: "tiny", disabled: !!this.app.world.cinematic, onclick: () => this.app.replayStory() }, "💬 Revoir la scène")
         : null));
     this.storyFoot();
   }
@@ -182,7 +247,11 @@ export class LessonPanel {
 
   render_explain(body) {
     const { level, curriculum } = this.app;
-    body.innerHTML = md(level.explanation);
+    body.append(el("div", { class: "card follow-card" },
+      el("p", {}, "▶ Le programme de ce niveau tourne dans le monde. Dans l'éditeur, la ligne en cours est surlignée ; ici, le passage du cours qui l'explique s'éclaire."),
+      el("button", { class: "tiny", onclick: () => this.app.runDemo(true) }, "↻ Rejouer depuis le début")));
+    this.explainText = el("div", { class: "explain-text", html: md(level.explanation) });
+    body.append(this.explainText);
     const chips = el("div", {}, el("div", { class: "small muted" }, "Notions de ce niveau :"));
     level.notions.forEach((n) => {
       const state = this.app.progress.notions[n] || "unknown";
@@ -190,7 +259,25 @@ export class LessonPanel {
     });
     body.append(chips);
     if (level.going_further) body.append(el("div", { class: "card", html: md(level.going_further) }));
-    body.append(this.next("Voir le code →", "demo"));
+    body.append(this.next("Démo pas à pas →", "demo"));
+  }
+
+  // The course follows the program: the passage that best explains the line
+  // being run lights up (the functions it calls, its keywords, its
+  // operators, mentioned in the passage's code). No good match: nothing.
+  follow(line, code) {
+    const root = this.explainText;
+    if (!root || !root.isConnected) return;
+    const blocks = [...root.querySelectorAll(":scope > p, :scope > ul > li, :scope > ol > li, :scope > pre, :scope > table tbody tr, :scope > div > table tbody tr")];
+    const best = bestPassage(blocks.map((b) => ({ text: b.textContent, code: [...b.querySelectorAll("code")].map((c) => c.textContent).join(" ") + (b.tagName === "PRE" ? b.textContent : "") })), code);
+    blocks.forEach((b, i) => {
+      const on = i === best;
+      b.classList.toggle("following", on);
+      if (on) {
+        b.dataset.line = `ligne ${line}`;
+        b.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    });
   }
 
   render_demo(body) {

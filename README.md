@@ -219,6 +219,15 @@ leurs règles, et les tests vérifient qu'elles réagissent bien à la démo. L'
 recalculé depuis le début de l'exécution : reculer ou sauter une étape montre toujours
 le même monde.
 
+**Histoire, puis Cours** : l'étape « Histoire » ne fait que raconter (la scène des
+personnages, le code reste caché). Le clic sur « Comprendre » ouvre le cours **et lance
+le programme du niveau** (à chaque fois) : le code apparaît, la ligne en cours est
+surlignée dans l'éditeur, la console et le monde montrent ce qu'elle fait, et le passage
+du cours qui explique cette ligne s'éclaire (avec « ligne N »). Le passage est choisi
+d'après ce que fait la ligne (les fonctions qu'elle appelle, ses mots-clés, ses
+opérateurs, ce qu'elle construit : une classe, un constructeur, une boucle…) ; si aucun
+passage n'en parle, rien ne s'éclaire.
+
 **Mots expliqués (pour les grands débutants)** : dans les leçons, les mots qu'un
 débutant risque de ne pas connaître — « Entrées du programme », « inspecteur », « chaîne
 de caractères », « entier », « fonction », « boucle », « classe », « exception »… (environ
@@ -355,8 +364,8 @@ d'audit et la liste blanche s'appliquent.
 ## Tests
 
 ```
-python3 -m pytest -q tests        # 628 tests (dont le navigateur si Chrome est présent)
-node --test tests/js/*.test.mjs  # 34 tests JavaScript (aussi lancés par pytest)
+python3 -m pytest -q tests        # 629 tests (dont le navigateur si Chrome est présent)
+node --test tests/js/*.test.mjs  # 36 tests JavaScript (aussi lancés par pytest)
 python3 -m mypy server run.py     # aucune erreur
 ```
 
