@@ -219,6 +219,17 @@ leurs règles, et les tests vérifient qu'elles réagissent bien à la démo. L'
 recalculé depuis le début de l'exécution : reculer ou sauter une étape montre toujours
 le même monde.
 
+**Mots expliqués (pour les grands débutants)** : dans les leçons, les mots qu'un
+débutant risque de ne pas connaître — « Entrées du programme », « inspecteur », « chaîne
+de caractères », « entier », « fonction », « boucle », « classe », « exception »… (environ
+80 mots, `web/js/glossary.js`) — sont soulignés en pointillés. Un clic ouvre une petite
+bulle à côté du mot : une définition simple, une explication pour quelqu'un qui n'a
+jamais programmé, et souvent un exemple. Seule la première apparition de chaque mot
+dans une étape est soulignée, pour que le texte reste lisible ; ✕, Échap ou un clic
+ailleurs referme la bulle, la leçon reste telle quelle. Les zones de l'écran ont aussi
+leur bouton « ? » (Entrées du programme, input, sys.argv, console, pas à pas,
+inspecteur, diagramme).
+
 **Personnages, décor et créatures** : un clic sur un personnage — ou sur son nom (dans
 le monde, ou dans la leçon : « 👥 Rencontre les habitants ») — rapproche la caméra et
 ouvre sa fiche : rôle, description, caractère, ce qu'il dit maintenant (l'histoire tant
@@ -344,8 +355,8 @@ d'audit et la liste blanche s'appliquent.
 ## Tests
 
 ```
-python3 -m pytest -q tests        # 624 tests (dont le navigateur si Chrome est présent)
-node --test tests/js/*.test.mjs  # 31 tests JavaScript (aussi lancés par pytest)
+python3 -m pytest -q tests        # 628 tests (dont le navigateur si Chrome est présent)
+node --test tests/js/*.test.mjs  # 34 tests JavaScript (aussi lancés par pytest)
 python3 -m mypy server run.py     # aucune erreur
 ```
 

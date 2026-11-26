@@ -13,6 +13,7 @@ import { Tour } from "./tour.js";
 import { TRAILER_KEY, Trailer } from "./trailer.js";
 import { reactionState } from "./reactions.js";
 import { TraceModel, describe } from "./trace.js";
+import { setupGlossary, watchTerms } from "./glossary.js";
 import { api, el, esc, md, pushToast, showValue, toast } from "./util.js";
 
 const SAVE_KEY = "pycraft.save";
@@ -65,6 +66,11 @@ class App {
     });
     this.inspector = new Inspector($("tab-inspector"), { onSelect: (t) => this.select(t) });
     this.lesson = new LessonPanel($("tab-lesson"), this);
+    // The difficult words of the lessons (and of the messages under the
+    // console) can be clicked: a small bubble explains them simply.
+    setupGlossary();
+    watchTerms($("tab-lesson"));
+    watchTerms($("console-extra"));
     this.bindUi();
   }
 

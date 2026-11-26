@@ -46,11 +46,11 @@
       </div>
     </div>
     <details id="io-panel" class="io-panel">
-      <summary>⌨ Entrées du programme <span id="io-summary" class="muted small"></span></summary>
+      <summary>⌨ Entrées du programme <button type="button" class="term-help" data-term="entrees" title="C'est quoi, les entrées du programme ?" aria-label="C'est quoi, les entrées du programme ?">?</button> <span id="io-summary" class="muted small"></span></summary>
       <div class="io-grid">
-        <label class="small">Ce que l'utilisateur tape (input) — une réponse par ligne
+        <label class="small">Ce que l'utilisateur tape (input) <button type="button" class="term-help" data-term="input" title="C'est quoi, input() ?" aria-label="C'est quoi, input() ?">?</button> — une réponse par ligne
           <textarea id="io-stdin" rows="3" spellcheck="false" placeholder="ex : 12"></textarea></label>
-        <label class="small">Arguments de la ligne de commande (sys.argv)
+        <label class="small">Arguments de la ligne de commande (sys.argv) <button type="button" class="term-help" data-term="argv" title="C'est quoi, sys.argv ?" aria-label="C'est quoi, sys.argv ?">?</button>
           <input id="io-argv" spellcheck="false" placeholder='ex : /tp 10 64 -3   ou   "Data Quest"'></label>
       </div>
     </details>
@@ -60,7 +60,7 @@
       <span id="save-state" class="muted small"></span>
     </div>
     <div id="console" class="console">
-      <div class="console-head">Console <span id="console-step" class="muted small"></span></div>
+      <div class="console-head">Console <button type="button" class="term-help" data-term="console" title="C'est quoi, la console ?" aria-label="C'est quoi, la console ?">?</button> <span id="console-step" class="muted small"></span></div>
       <pre id="console-out"></pre>
       <div id="console-extra"></div>
     </div>
@@ -90,6 +90,7 @@
       <div id="world-banner" class="world-banner hidden"></div>
     </div>
     <div id="timeline">
+      <button type="button" class="term-help" data-term="pasapas" title="C'est quoi, le pas à pas ?" aria-label="C'est quoi, le pas à pas ?">?</button>
       <button id="tl-start" class="tiny" title="Début">⏮</button>
       <button id="tl-back" class="tiny" title="Pas précédent (Maj+F10)">◀</button>
       <button id="tl-play" class="tiny wide" title="Lecture / pause (Espace dans le monde)">▶ Lecture</button>
@@ -108,8 +109,8 @@
   <section id="right" class="panel">
     <div class="tabs">
       <button data-tab="lesson" class="tab active">Leçon</button>
-      <button data-tab="inspector" class="tab">Inspecteur</button>
-      <button data-tab="diagram" class="tab">Diagramme</button>
+      <button data-tab="inspector" class="tab">Inspecteur</button><button type="button" class="term-help" data-term="inspecteur" title="C'est quoi, l'inspecteur ?" aria-label="C'est quoi, l'inspecteur ?">?</button>
+      <button data-tab="diagram" class="tab">Diagramme</button><button type="button" class="term-help" data-term="diagramme" title="C'est quoi, le diagramme ?" aria-label="C'est quoi, le diagramme ?">?</button>
     </div>
     <div id="tab-lesson" class="tab-body active"></div>
     <div id="tab-inspector" class="tab-body"></div>

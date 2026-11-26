@@ -1012,3 +1012,43 @@ def test_rubber_ducks(server_url: str) -> None:
                    for a in stats["achievements"])
         browser.close()
     assert not errors, errors
+
+
+def test_difficult_words_are_explained(server_url: str) -> None:
+    """Level 1.3: the words a beginner may not know are clickable; a click
+    opens a small explanation next to them (the lesson stays as it is),
+    Escape closes it. The interface has its own « ? » buttons."""
+    playwright = pytest.importorskip("playwright.sync_api")
+    chrome = _browser()
+    if chrome is None:
+        pytest.skip("aucun navigateur Chrome/Chromium")
+    with playwright.sync_playwright() as p:
+        browser, page, errors = _open_app(p, server_url, chrome)
+        page.evaluate("""async () => { const a = window.pycraft;
+            a.level = a.levelsById['a1l3']; a.region = a.regionOf['a1l3'];
+            a.step = 'demo'; a.lesson.render(); }""")
+        page.wait_for_timeout(300)
+        terms = page.evaluate("[...document.querySelectorAll("
+                              "'#tab-lesson .term')].map(b => b.dataset.term)")
+        for word in ("entrees", "inspecteur", "chaine", "entier", "crieur"):
+            assert word in terms, (word, terms)
+        assert len(terms) == len(set(terms)), "each word linked once"
+        lesson = page.locator("#tab-lesson").inner_text()
+        page.click("#tab-lesson .term[data-term=entier]")
+        pop = page.locator(".term-pop")
+        assert pop.is_visible()
+        assert "sans virgule" in pop.inner_text()
+        assert page.locator("#tab-lesson").inner_text() == lesson
+        page.keyboard.press("Escape")
+        assert page.locator(".term-pop").count() == 0
+        # The « ? » of the inputs box explains it without opening/closing it.
+        before = page.evaluate("document.getElementById('io-panel').open")
+        page.click("#io-panel summary .term-help")
+        assert "Entrées du programme" in page.locator(".term-pop").inner_text()
+        assert page.evaluate("document.getElementById('io-panel').open") \
+            == before
+        # A click elsewhere closes it.
+        page.mouse.click(5, 300)
+        assert page.locator(".term-pop").count() == 0
+        browser.close()
+    assert not errors, errors
