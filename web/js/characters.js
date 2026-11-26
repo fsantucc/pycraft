@@ -70,7 +70,7 @@ export const PROP_INFO = {
   torch: { name: "Torche", icon: "🔥",
     info: (c) => lit(c, "Elle est allumée et réchauffe les environs.", "Éteinte, pour l'instant. Le programme ou la mission la rallumera.") },
   campfire: { name: "Feu de camp", icon: "🔥", info: (c) => lit(c, "Le feu crépite. Tout le monde se rassemble autour.", "Des cendres froides.") },
-  well: { name: "Puits", icon: "💧", info: () => "L'eau est fraîche et profonde. On entend son écho tout au fond." },
+  well: { name: "Puits", icon: "💧", info: () => "L'eau est fraîche et profonde. On peut parfois y apercevoir des petits canards jaunes flotter..." },
   bridge: { name: "Pont", icon: "🌉", info: (c) => lit(c, "Le pont est réparé : toutes les planches sont en place.", "Il manque des planches : traverser serait risqué.") },
   fence: { name: "Clôture", icon: "🪵", info: () => "Elle délimite le pré." },
   board: { name: "Panneau", icon: "🪧", info: (c) => `On y lit : « ${c.level.mission_title} ».` },
@@ -153,12 +153,13 @@ export const BOOKS = [
 // The secrets of the world (a nod to 42): what the thing says when the
 // player finds it.
 export const EGGS = {
-  piscine: "On l'appelle « la piscine » : ceux qui y plongent un mois entier en ressortent développeurs.",
+  piscine: "Dans notre village, ce puits, on l'appelle aussi « La piscine ». Une légende raconte que ceux qui y plongent un mois entier en ressortent (presque) développeurs.",
   clock: "Elle s'est arrêtée à 4 h 42. Personne n'a jamais voulu la remettre à l'heure.",
   guide: "Une page est cornée : « La réponse à la grande question sur la vie, l'univers et le reste ? 42. »",
   peer: "Tu sais ce qu'on dit à 42 ? Quand tu bloques, demande à ton voisin… puis explique-lui à ton tour. C'est comme ça qu'on apprend vraiment.",
   marvin: "Ce mannequin s'appelle Marvin. Il encaisse tout sans un mot… et il a l'air terriblement déprimé.",
   segfault: "Gravé dans la pierre : « Segmentation fault (core dumped) ». Quelqu'un a creusé un peu trop loin.",
   answer: "42 ! La réponse à la grande question sur la vie, l'univers et le reste.",
+  canard: "Couic ! On dit qu'expliquer son code à un canard en plastique aide à trouver ses bugs.",
   moulinette: "On raconte que la Moulinette est née dans ce chaudron : elle goûte chaque recette et n'accepte aucune approximation.",
 };

@@ -978,3 +978,37 @@ def test_editor_helps_with_brackets_and_indentation(server_url: str) -> None:
         assert page.locator("#editor .br-match").count() == 2
         browser.close()
     assert not errors, errors
+
+
+def test_rubber_ducks(server_url: str) -> None:
+    """A rubber duck waddles on the map; a click on it: couic, it is gone
+    (and the secret is recorded)."""
+    playwright = pytest.importorskip("playwright.sync_api")
+    chrome = _browser()
+    if chrome is None:
+        pytest.skip("aucun navigateur Chrome/Chromium")
+    with playwright.sync_playwright() as p:
+        browser, page, errors = _open_app(p, server_url, chrome)
+        page.evaluate("window.pycraft.closeInspect(true)")
+        page.evaluate("""() => { const w = window.pycraft.world;
+            const d = w.ducks.spawn(w.now());
+            d.x = 11; d.y = 11; d.tx = 13; d.ty = 11;
+            d.leaveAt = Infinity; }""")
+        page.wait_for_timeout(1500)
+        duck: Any = page.evaluate("""() => { const w = window.pycraft.world;
+            const d = w.ducks.list[0];
+            const h = w.hitboxes.find((b) => b.target.kind === 'duck');
+            const r = w.canvas.getBoundingClientRect();
+            return { x: d.x, dir: d.dir,
+                     at: [r.left + (h.x0 + h.x1) / 2,
+                          r.top + (h.y0 + h.y1) / 2] }; }""")
+        assert duck["x"] > 11.3 and duck["dir"] == 3, "it waddles"
+        page.mouse.click(duck["at"][0], duck["at"][1])
+        page.wait_for_timeout(900)
+        assert page.evaluate("window.pycraft.world.ducks.list.length") == 0
+        page.wait_for_timeout(400)
+        stats = page.evaluate("fetch('/api/stats').then((r) => r.json())")
+        assert any(a["id"] == "egg_first" and a["unlocked"]
+                   for a in stats["achievements"])
+        browser.close()
+    assert not errors, errors

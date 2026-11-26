@@ -227,7 +227,7 @@ réussite ; « Lui parler » passe à la réplique suivante), et son rôle dans 
 ✕, Échap ou un clic ailleurs : la caméra revient où elle était. Le décor se clique
 aussi (coffre et porte qui s'ouvrent, état de la forge ou de la lanterne, panneau de la
 mission…), comme les créatures (elles réagissent à l'approche du pointeur) et les boss.
-Quelques secrets, clins d'œil à 42, sont cachés dans le monde (succès cachés).
+Quelques secrets, clins d'œil à 42, sont cachés dans le monde (succès cachés). De temps en temps, un petit canard en plastique jaune traverse la carte en se dandinant, sur tous les niveaux et toutes les étapes (jamais pendant une cinématique) : un clic dessus, « Couic ! », il disparaît.
 
 **Scènes d'histoire** : chaque niveau (les 43) a sa scène dans le coin droit de la carte,
 avec les personnages et le décor de l'histoire (le villageois et sa maison à éclairer, le
@@ -344,8 +344,8 @@ d'audit et la liste blanche s'appliquent.
 ## Tests
 
 ```
-python3 -m pytest -q tests        # 620 tests (dont le navigateur si Chrome est présent)
-node --test tests/js/*.test.mjs  # 28 tests JavaScript (aussi lancés par pytest)
+python3 -m pytest -q tests        # 624 tests (dont le navigateur si Chrome est présent)
+node --test tests/js/*.test.mjs  # 31 tests JavaScript (aussi lancés par pytest)
 python3 -m mypy server run.py     # aucune erreur
 ```
 

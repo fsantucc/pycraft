@@ -4,6 +4,7 @@
 import { Particles, hash, nameTag, roundRect, speechBubble } from "./fx.js";
 import { coeurBounds, coeurTile, collectCoeur, drawCoeurLights, drawCoeurSky } from "./coeur.js";
 import { orderBoxes } from "./depth.js";
+import { Ducks, duckParts } from "./ducks.js";
 import { buildParts, crierParts, healthOf } from "./models.js";
 import { npcParts, propParts, SKINS } from "./scene.js";
 import { sound } from "./sound.js";
@@ -99,6 +100,9 @@ export class World {
     this.time = 0;
     this.paused = false;
     this.later = [];
+    // Rubber ducks waddling on the map (?intro=0, the automated tests: none).
+    this.ducks = new Ducks();
+    this.ducksOn = new URLSearchParams(window.location.search).get("intro") !== "0";
     // Night falling on the world (a program can make it happen): 0 day, 1 night.
     this.night = { from: 0, to: 0, t0: 0, dur: 1 };
     // Smooth camera moves asked by the player (zoom, recentre, focus).
@@ -1401,6 +1405,45 @@ export class World {
     // (it shrinks for 450 ms of world time, then collectMobs forgets it)
   }
 
+  // The rubber ducks: a waddle (sway and hop); a click flips them over in a
+  // puff of feathers.
+  collectDucks(list, now) {
+    const k = 0.62;
+    for (const d of this.ducks.list) {
+      const dying = d.dying ? Math.min(1, (now - d.dying) / 500) : 0;
+      const grow = Math.min(1, (now - d.born) / 400);
+      const s = k * grow * (1 - dying);
+      if (s <= 0.01) continue;
+      const moving = now >= d.pause && !d.dying;
+      const hop = moving ? Math.abs(Math.sin(now / 110 + d.born)) * 0.06 : 0;
+      const sway = moving ? Math.sin(now / 110 + d.born) * 0.04 : 0;
+      const lift = dying * 0.6;
+      const parts = duckParts(d.dir);
+      const ox = d.x - s / 2 + sway;
+      const oy = d.y - s / 2;
+      list.push({ d: this.depthOf(d.x, d.y, 0), fn: () => {
+        this.drawModel(parts,
+          (p) => ({ x: ox + p.x * s, y: oy + p.y * s, z: hop + lift + (dying ? (s - p.z * s - p.h * s) + 0.5 * s : p.z * s), w: p.w * s, d: p.d * s, h: p.h * s }),
+          (p, pi) => ({ color: p.c, outline: p.role === "eye" ? null : "rgba(0,0,0,0.3)", tex: 0, seed: pi }));
+      } });
+      if (!d.dying) {
+        const box = this.screenBox(ox, oy, parts.map((p) => ({ x: p.x * s, y: p.y * s, z: p.z * s + hop, w: p.w * s, d: p.d * s, h: p.h * s })));
+        // (a duck is small: a slightly larger target)
+        this.hitboxes.push({ x0: box.x0 - 6, x1: box.x1 + 6, y0: box.y0 - 6, y1: box.y1 + 4, target: { kind: "duck", id: d.id } });
+      }
+    }
+  }
+
+  killDuck(id) {
+    const d = this.ducks.kill(id, this.now());
+    if (!d) return false;
+    const at = () => this.project(d.x, d.y, 0.4);
+    this.particles.burst(at, { count: 26, colors: ["#f7d02c", "#fff3a0", "#ffffff"], speed: 90, up: 80, gravity: 60, size: 4, life: 900 });
+    this.addEffect({ kind: "float", at, text: "Couic !", color: "#f7d02c", dur: 1100 });
+    sound.play("squeak");
+    return true;
+  }
+
   collectMobs(list, now) {
     this.mobs = this.mobs.filter((m) => !m.dying || now - m.dying < 450);
     for (const m of this.mobs) {
@@ -1814,6 +1857,7 @@ export class World {
     }
     if (this.cinematic) this.cinematic.update();
     this.spawnAmbient(now);
+    this.ducks.update(now, real / 1000, this.ducksOn && !this.cinematic && !this.trailerActive && !document.hidden);
     this.draw(now);
   }
 
@@ -1934,6 +1978,7 @@ export class World {
     this.collectProps(drawables, now);
     this.collectStage(drawables, now);
     this.collectMobs(drawables, now);
+    this.collectDucks(drawables, now);
     if (this.theme.coeur) collectCoeur(this, drawables, now);
 
     // Blueprint pedestals and holograms (with a scan line while building).

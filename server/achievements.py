@@ -20,7 +20,7 @@ MAX_PING_SECONDS = 60
 # Little secrets of the world (a nod to 42): the browser reports which one
 # the player found; only these ids are accepted.
 EGGS = ("piscine", "clock", "guide", "peer", "marvin", "segfault",
-        "answer", "moulinette")
+        "answer", "moulinette", "canard")
 
 
 @dataclass(frozen=True)

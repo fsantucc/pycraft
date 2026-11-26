@@ -352,6 +352,11 @@ const SOUNDS = {
     for (let i = 0; i < 5; i += 1) noise(g, out, t + 0.18 + i * 0.07 + rand(0, 0.03), { dur: 0.03, vol: 0.16, type: "highpass", freq: rand(2500, 4500), q: 1 });
     bell(g, out, t + 0.12, mtof(79), 0.05, 0.6);
   },
+  // A rubber duck squeezed: two squeaky notes bending up.
+  squeak(g, out, t) {
+    chip(g, out, t, 1300, 0.09, 0.22, "square", 1900);
+    chip(g, out, t + 0.1, 1500, 0.12, 0.2, "square", 2300);
+  },
   // Metal on metal (an anvil, a gate).
   clang(g, out, t) {
     bell(g, out, t, rand(880, 940), 0.16, 0.9);
@@ -443,7 +448,7 @@ const MIX = {
   heartbeat: ["sfx", 1, 0.2], drone: ["sfx", 0.9, 0.6], chime: ["sfx", 1, 0.6], riser: ["sfx", 0.9, 0.45],
   impact: ["sfx", 1, 0.5],
   ignite: ["sfx", 0.9, 0.35], clang: ["sfx", 0.8, 0.4], splash: ["sfx", 0.8, 0.3], door: ["sfx", 0.8, 0.2],
-  creature: ["sfx", 0.8, 0.25],
+  creature: ["sfx", 0.8, 0.25], squeak: ["sfx", 0.7, 0.15],
 };
 const DUCK = new Set(["victory", "achievement", "levelup", "boom", "fail", "impact", "drone", "riser"]);
 

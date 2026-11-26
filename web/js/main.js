@@ -973,6 +973,11 @@ class App {
       sound.play(target.kind === "heart" ? "heartbeat" : "chime", { note: 72 + (target.id || 0) * 4 });
       return;
     }
+    if (target && target.kind === "duck") {
+      // A rubber duck: couic, gone.
+      if (this.world.killDuck(target.id)) this.foundEgg("canard");
+      return;
+    }
     if (target && ["npc", "prop", "mob", "boss"].includes(target.kind)) {
       // A character, a thing of the scenery, a creature: the camera goes
       // there and a card tells who / what it is.
@@ -1225,7 +1230,7 @@ class App {
 
   hover(target, e) {
     const tip = $("tooltip");
-    if (!target || (!this.state && !["npc", "heart", "seal", "prop", "mob", "boss"].includes(target.kind))) {
+    if (!target || (!this.state && !["npc", "heart", "seal", "prop", "mob", "boss", "duck"].includes(target.kind))) {
       tip.classList.add("hidden");
       return;
     }
@@ -1254,6 +1259,8 @@ class App {
         mob.reactAt = now;
       }
       html = `<b>${esc(creatureOf(mob.model).name)}</b><br><i>Clique pour l'observer.</i>`;
+    } else if (target.kind === "duck") {
+      html = "<b>🦆 Un canard en plastique</b><br><i>Clique dessus…</i>";
     } else if (target.kind === "boss") {
       html = `<b>${esc(this.world.boss ? this.world.boss.name : "Boss")}</b><br><i>Le gardien de ce niveau. Clique pour l'observer.</i>`;
     } else if (target.kind === "object") {
